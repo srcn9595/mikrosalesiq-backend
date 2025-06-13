@@ -1,0 +1,21 @@
+FROM continuumio/miniconda3
+
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    libgl1 \
+    libglib2.0-0 \
+    build-essential \
+    portaudio19-dev \
+    libportaudio2 \
+    libportaudiocpp0 \
+    ffmpeg \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY environment.yml /tmp/environment.yml
+COPY requirements.txt /tmp/requirements.txt
+COPY requirements.extra.txt /tmp/requirements.extra.txt
+
+RUN conda env create -n deep_sercan -f /tmp/environment.yml
+ENV PATH /opt/conda/envs/deep_sercan/bin:$PATH
+RUN pip install --no-cache-dir -r /tmp/requirements.extra.txt

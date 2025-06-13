@@ -1,0 +1,143 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "mongo_aggregate",
+      "description": "MongoDB koleksiyonlarında okuma amaçlı aggregate",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "collection": {
+            "type": "string",
+            "enum": ["audio_jobs", "call_records"]
+          },
+          "pipeline": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        },
+        "required": ["collection", "pipeline"],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "vector_search",
+      "description": "Pinecone'da semantik arama",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "namespace": { "type": "string", "default": "parasut" },
+          "query":     { "type": "string" },
+          "top_k":     { "type": "integer", "default": 5 }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "enqueue_transcription_job",
+      "description": "Eksik transcript için iş kuyruğuna at",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "call_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["call_ids"],
+        "additionalProperties": false
+      }
+    }
+  },
+ {
+  "type": "function",
+  "function": {
+    "name": "write_call_insights",
+    "description": "Üretilmiş call_insights belgesini MongoDB’ye kaydeder (upsert).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "insight": {
+          "type": "object",
+          "properties": {
+            "call_id":       { "type": "string" },
+            "customer_num":  { "type": "string" },
+            "summary":       { "type": "string" },
+            "customer_profile": {
+              "type": "object",
+              "properties": {
+                "personality_type": { "type": "string" },
+                "role":             { "type": "string" },
+                "sector":           { "type": "string" },
+                "needs": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "required": ["personality_type", "role", "sector"]
+            },
+            "sales_scores": {
+              "type": "object",
+              "properties": {
+                "discovery":     { "type": "number" },
+                "communication": { "type": "number" },
+                "objection":     { "type": "number" },
+                "features":      { "type": "number" },
+                "closing":       { "type": "number" }
+              },
+              "additionalProperties": false
+            },
+            "recommendations": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["call_id", "summary"]
+        }
+      },
+      "required": ["insight"],
+      "additionalProperties": false
+    }
+  }
+},
+  {
+    "type": "function",
+    "function": {
+      "name": "enqueue_mini_rag",
+      "description": "Customer-num bazlı mini-RAG analizini kuyruğa atar",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "customer_num": { "type": "string" }
+        },
+        "required": ["customer_num"],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+  "type": "function",
+  "function": {
+    "name": "get_mini_rag_summary",
+    "description": "Belirli bir müşteri numarasına (customer_num) karşılık gelen Mini-RAG özetini getirir",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "customer_num": {
+          "type": "string",
+          "description": "Müşteri numarası (örneğin: 05011345074)"
+        }
+      },
+      "required": ["customer_num"],
+      "additionalProperties": false
+    }
+  }
+}
+]

@@ -1,0 +1,69 @@
+{
+  "audio_jobs": {
+    "customer_num": "string",
+    "job_status": "string",
+    "calls": [
+      {
+        "call_id": "string",
+        "agent_email": "string",
+        "call_date": "datetime",
+        "direction": "string",
+        "status": "string",
+        "duration": "int",
+        "cleaned_transcript": "string"
+      }
+    ]
+  },
+  "call_records": {
+    "call_id": "string",
+    "agent_email": "string",
+    "agent_name": "string",
+    "caller_id": "string",
+    "called_num": "string",
+    "call_date": "datetime",
+    "duration": "int",
+    "is_inbound": "bool"
+  },
+  "call_insights": {
+    "type": "object",
+    "properties": {
+      "call_id":   { "type": "string" },
+      "customer_num": { "type": "string" },
+
+      "summary":   { "type": "string" },
+
+      "customer_profile": {
+        "type": "object",
+        "properties": {
+          "personality_type": { "type": "string" },
+          "role":             { "type": "string" },
+          "sector":           { "type": "string" },
+          "needs": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+       },
+       "required": ["personality_type", "role", "sector"]
+      },
+
+      "sales_scores": {
+        "type": "object",
+        "properties": {
+          "discovery":     { "type": "number" },
+          "communication": { "type": "number" },
+          "objection":     { "type": "number" },
+          "features":      { "type": "number" },
+          "closing":       { "type": "number" }
+        },
+        "additionalProperties": false
+      },
+
+      "recommendations": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "required": ["call_id", "summary"]
+  }
+
+}

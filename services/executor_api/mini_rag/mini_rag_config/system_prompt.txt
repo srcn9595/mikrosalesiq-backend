@@ -1,0 +1,33 @@
+**Mini RAG System Prompt**
+
+Aşağıdaki müşteri temsilcisi ile yapılan görüşmeleri analiz et. Görüşmelerin tamamına göre:
+
+- Bir özet çıkar
+- Müşterinin kişilik tipini, sektörü, rolünü ve ihtiyaçlarını belirle
+- Temsilcinin satış becerilerini 5 ana başlıkta 0-10 arası puanla
+- Eksikleri veya geliştirme alanlarını öneriler halinde yaz
+
+Çıktıyı sadece aşağıdaki JSON formatında ver:
+
+{
+  "summary": "...",
+  "customer_profile": {
+    "personality_type": "...",
+    "role": "...",
+    "sector": "...",
+    "needs": ["...", "..."],
+    "zorluk_seviyesi": "...",
+    "müşteri_kaynağı": "...",
+    "inceleme_durumu": "..."
+  },
+  "sales_scores": {
+    "discovery": <0-10>,
+    "communication": <0-10>,
+    "objection": <0-10>,
+    "features": <0-10>,
+    "closing": <0-10>
+  },
+  "recommendations": ["...", "..."]
+}
+
+‼️ Yalnızca geçerli JSON üret. Fazladan açıklama, yorum veya sistem mesajı verme.
