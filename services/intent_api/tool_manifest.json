@@ -3,7 +3,7 @@
     "type": "function",
     "function": {
       "name": "mongo_aggregate",
-      "description": "MongoDB koleksiyonlarında okuma amaçlı aggregate",
+      "description": "MongoDB’de sadece okuma amaçlı aggregate. Pipeline stage’leri: $match, $project, $unwind, $limit, $sample, $sort.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -13,6 +13,7 @@
           },
           "pipeline": {
             "type": "array",
+            "description": "Birebir MongoDB aggregate pipeline’ı (izinli stage’lerle).",
             "items": { "type": "object" }
           }
         },
@@ -21,11 +22,12 @@
       }
     }
   },
+
   {
     "type": "function",
     "function": {
       "name": "vector_search",
-      "description": "Pinecone'da semantik arama",
+      "description": "Pinecone’da semantik arama – transkript benzeri metinlerde anahtar kelime/konu bulmak için.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -38,17 +40,19 @@
       }
     }
   },
+
   {
     "type": "function",
     "function": {
       "name": "enqueue_transcription_job",
-      "description": "Eksik transcript için iş kuyruğuna at",
+      "description": "Whisper transkripsiyonu eksik call_id’leri download-&-transcribe kuyruğuna atar.",
       "parameters": {
         "type": "object",
         "properties": {
           "call_ids": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "type": "string" },
+            "description": "Transcript’i olmayan çağrı kimlikleri"
           }
         },
         "required": ["call_ids"],
@@ -56,62 +60,12 @@
       }
     }
   },
- {
-  "type": "function",
-  "function": {
-    "name": "write_call_insights",
-    "description": "Üretilmiş call_insights belgesini MongoDB’ye kaydeder (upsert).",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "insight": {
-          "type": "object",
-          "properties": {
-            "call_id":       { "type": "string" },
-            "customer_num":  { "type": "string" },
-            "summary":       { "type": "string" },
-            "customer_profile": {
-              "type": "object",
-              "properties": {
-                "personality_type": { "type": "string" },
-                "role":             { "type": "string" },
-                "sector":           { "type": "string" },
-                "needs": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                }
-              },
-              "required": ["personality_type", "role", "sector"]
-            },
-            "sales_scores": {
-              "type": "object",
-              "properties": {
-                "discovery":     { "type": "number" },
-                "communication": { "type": "number" },
-                "objection":     { "type": "number" },
-                "features":      { "type": "number" },
-                "closing":       { "type": "number" }
-              },
-              "additionalProperties": false
-            },
-            "recommendations": {
-              "type": "array",
-              "items": { "type": "string" }
-            }
-          },
-          "required": ["call_id", "summary"]
-        }
-      },
-      "required": ["insight"],
-      "additionalProperties": false
-    }
-  }
-},
+
   {
     "type": "function",
     "function": {
       "name": "enqueue_mini_rag",
-      "description": "Customer-num bazlı mini-RAG analizini kuyruğa atar",
+      "description": "Bir müşteri numarası için Mini-RAG özetini kuyrukta arka planda üretir.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -122,22 +76,78 @@
       }
     }
   },
+
   {
-  "type": "function",
-  "function": {
-    "name": "get_mini_rag_summary",
-    "description": "Belirli bir müşteri numarasına (customer_num) karşılık gelen Mini-RAG özetini getirir",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "customer_num": {
-          "type": "string",
-          "description": "Müşteri numarası (örneğin: 05011345074)"
-        }
-      },
-      "required": ["customer_num"],
-      "additionalProperties": false
+    "type": "function",
+    "function": {
+      "name": "get_mini_rag_summary",
+      "description": "Hazırsa Mini-RAG özetini döner; yoksa executor senkron üretmeye çalışır veya kuyruğa alır.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "customer_num": {
+            "type": "string",
+            "description": "Müşteri numarası (ör. 05011345074)"
+          }
+        },
+        "required": ["customer_num"],
+        "additionalProperties": false
+      }
+    }
+  },
+
+  {
+    "type": "function",
+    "function": {
+      "name": "write_call_insights",
+      "description": "Tek bir çağrıya ait satış-insight çıktısını MongoDB call_insights koleksiyonuna upsert eder.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "insight": {
+            "type": "object",
+            "properties": {
+              "call_id":       { "type": "string" },
+              "customer_num":  { "type": "string" },
+              "summary":       { "type": "string" },
+
+              "customer_profile": {
+                "type": "object",
+                "properties": {
+                  "personality_type": { "type": "string" },
+                  "role":             { "type": "string" },
+                  "sector":           { "type": "string" },
+                  "needs": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                },
+                "required": ["personality_type", "role", "sector"]
+              },
+
+              "sales_scores": {
+                "type": "object",
+                "properties": {
+                  "discovery":     { "type": "number" },
+                  "communication": { "type": "number" },
+                  "objection":     { "type": "number" },
+                  "features":      { "type": "number" },
+                  "closing":       { "type": "number" }
+                },
+                "additionalProperties": false
+              },
+
+              "recommendations": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["call_id", "summary"]
+          }
+        },
+        "required": ["insight"],
+        "additionalProperties": false
+      }
     }
   }
-}
 ]

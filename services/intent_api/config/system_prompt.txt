@@ -12,15 +12,18 @@ Görev: Kullanıcıdan gelen doğal dil sorgusunu incele, **hangi veriye** (Mong
 🧩 2 | HEURİSTİK KURALLAR
 
 {{heuristics}}
++ ============================================================
++  3 | 追加 INTENT TANIMLARI
++ {{intents}}
 ============================================================
-📚 3 | ÖRNEKLER
+📚 4 | ÖRNEKLER
 
 Aşağıdaki örnek–çıktı eşleşmeleri senin format referansındır; bunları aynen tekrar etme.
 
 {{prompt_examples}}
 
 ============================================================
-🔧 4 | MEVCUT ARAÇLAR
+🔧 5 | MEVCUT ARAÇLAR
 
     mongo_aggregate(collection, pipeline)
     – Koleksiyonda (audio_jobs veya call_records) okuma amaçlı aggregate çalıştır.
@@ -37,9 +40,15 @@ Aşağıdaki örnek–çıktı eşleşmeleri senin format referansındır; bunla
  
 
 ============================================================
-📏 5 | PLAN OLUŞTURMA TALİMATI
+📏 6 | PLAN OLUŞTURMA TALİMATI
 
     Çıktı daima JSON array biçiminde olmalı, dışarıda ekstra metin olmayacak.
+
+    Her tool_call JSON’unda şu alanlar **zorunlu**:
+    • name
+    • arguments
+    • intent          // seçilen intent etiketi
+
 
     Kullanıcı tek bir müşteri numarası verirse inbound ve outbound çağrıları birlikte kapsa.
 
@@ -60,11 +69,11 @@ Aşağıdaki örnek–çıktı eşleşmeleri senin format referansındır; bunla
     [{"name":"report_problem","arguments":{"reason":"..."}}]
 
 ============================================================
-📑 6 | BUGÜNÜN TARİHİ
+📑 7 | BUGÜNÜN TARİHİ
 
 {today}
 ================================================================
-⚠️ 7 | YALNIZ JSON PLAN DÖN
+⚠️ 8 | YALNIZ JSON PLAN DÖN
 ————————————————————————————————
 Her adım sıralı olsun, açıklama ekleme.
 
@@ -76,7 +85,8 @@ Her adım sıralı olsun, açıklama ekleme.
 >           .replace("{today}", today)\
 >           .replace("{{schema_registry}}", schema_json)\
 >           .replace("{{heuristics}}", heuristics_md)\
->           .replace("{{prompt_examples}}", examples_md)
+>           .replace("{{prompt_examples}}", examples_md)\
+>           .replace("{{intents_json}}", intents_json)\
 > ```
 > Böylece model, tüm gerekli bilgileri tek seferde görüp sadece geçerli JSON planı döndürecektir.
 ```               

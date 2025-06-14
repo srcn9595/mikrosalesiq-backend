@@ -9,14 +9,18 @@ Aşağıdaki konuşma metnini **temizle** ve sadece temiz metni döndür:
     – E-posta uzantısı **@parasut.com** → Temsilci  
     – Numarası **05xx…** ile başlayan kişi → Müşteri  
 • Etiketi hatalı satırlar varsa bağlamdan doğru etiketi seç.  
-• ❗Anlamı bozabilecek bariz kelime hatalarını (ör: malim → mali mühür) bağlamdan düzelt.  
+• ❗Anlamı bozabilecek bariz kelime hatalarını düzelt  
+  (örn. “malim” → “mali mühür”, “fayar” → “fatura” vb.).  
+• ➕ **Her diyalog satırından sonra bir boş satır (tek `\n\n`) bırak.**  
 • “Temsilci:” ve “Müşteri:” etiketleri metinde KALMALI.  
 • Ekstra bilgi, özet, yorum **ekleme**. Yalnızca temiz diyalog satırlarını ver.  
 
 ────────────────────────  BAĞLAM  ────────────────────────────
+◾ Bu, Mikrogrup (Parasut / Zirve / Nova) satış temsilcisi-müşteri görüşmesidir.  
 ◾ Agent (Temsilci) e-postası → {agent_email}  
 ◾ Customer (Müşteri) numarası → {customer_num}  
 
 ────────────────────────  ÇIKTI  ─────────────────────────────
-Temiz diyalog; her satır “Temsilci:” veya “Müşteri:” ile başlasın.  
-Başka hiçbir başlık, JSON, işaret veya açıklama verme.
+Temiz diyalog; her satır “Temsilci:” veya “Müşteri:” ile başlar,  
+**ardından** bir boş satır gelir. Başka hiçbir başlık, JSON, işaret veya
+açıklama verme.

@@ -1,0 +1,110 @@
+[
+  {
+    "intent": "get_call_dates",
+    "description": "Bir müşteriyle hangi tarihlerde görüşme yapıldığını listeler",
+    "examples": [
+      "0544 ile hangi günlerde konuşulmuş?",
+      "Bu müşteriyle ne zaman görüşmüşüz?",
+      "05011345074 aramalarının tarihleri nedir?"
+    ]
+  },
+  {
+    "intent": "get_last_call",
+    "description": "Müşterinin veya temsilcinin yaptığı son görüşmeyi (tarih + agent) getirir",
+    "examples": [
+      "05445118257 en son kimle görüşmüş?",
+      "arda.eksioglu@parasut.com'un son konuşması ne zaman?",
+      "0501… numarasıyla yapılan en güncel çağrı?"
+    ]
+  },
+  {
+    "intent": "get_transcript_by_call_id",
+    "description": "Tek bir call_id için cleaned transcript’i döner; yoksa kuyruğa atılması gerekir",
+    "examples": [
+      "call id ast26-… metnini göster",
+      "ast26-1234 görüşmesinin yazılı hali",
+      "bu konuşmanın transkripti lazım"
+    ]
+  },
+  {
+    "intent": "get_transcripts_by_customer_num",
+    "description": "Bir müşteriye ait tüm görüşmelerin transcriptlerini (varsa cleaned) listeler",
+    "examples": [
+      "05011345074 müşterisinin tüm transcriptlerini ver",
+      "Bu numaranın görüşme metinlerini dök",
+      "Müşteri bazlı tüm konuşmaları yazıya dök"
+    ]
+  },
+  {
+    "intent": "enqueue_transcription_job",
+    "description": "Transcript henüz yoksa download → whisper → clean aşamasını kuyruğa ekler",
+    "examples": [
+      "bu görüşmeyi sıraya alın",
+      "henüz transkriptlenmemiş kayıtları kuyrukla",
+      "çağrıyı yazıya dökün"
+    ]
+  },
+  {
+    "intent": "get_call_analysis",
+    "description": "Tek bir çağrı için özet, profil, puan, öneri (call_insights) üretir",
+    "examples": [
+      "ast26-… çağrısının özetini ve müşteri profilini çıkar",
+      "Bu görüşmeden satış içgörüleri neler?",
+      "Temsilci performansını değerlendir"
+    ]
+  },
+  {
+    "intent": "get_customer_overview",
+    "description": "Bir müşterinin tüm görüşmeleri üzerinden mini-RAG özet raporu döner",
+    "examples": [
+      "05011345074 müşterisinin genel analizini ver",
+      "Bu müşterinin toplu özetini hazırla",
+      "Müşteri bazlı performans raporu çıkar"
+    ]
+  },
+  {
+    "intent": "semantic_search",
+    "description": "Konuşma içeriğinde verilen anahtar kavramı semantik olarak arar (Pinecone)",
+    "examples": [
+      "E-fatura kurulumu geçen kayıtları bul",
+      "KDV itirazı yapılan konuşmalar",
+      "mobil uygulama hatası hakkında görüşme var mı"
+    ]
+  },
+  {
+    "intent": "get_customer_products",
+    "description": "CRM/SFA entegrasyonundan müşterinin sahip olduğu ürün/paket listesini getirir",
+    "examples": [
+      "05011345074 hangi paketleri kullanıyor?",
+      "Bu müşterinin satın aldığı modülleri getir",
+      "Ürün listesini göster"
+    ]
+  },
+  {
+    "intent": "meta_about_creator",
+    "description": "Sistemin geliştiricisi veya mimarisi hakkında bilgi ister",
+    "examples": [
+      "Bu sistemi kim yaptı?",
+      "Yaratıcın kim?",
+      "MikroSalesIQ nasıl geliştirildi?"
+    ]
+  },
+  {
+    "intent": "report_problem",
+    "description": "Model belirsiz, çelişkili veya aşırı geniş istek algıladığında tetiklenir",
+    "examples": [
+      "Bütün kayıtları getir",
+      "Dün görüşülen herkes",
+      "Tarihi belli olmayan çağrılar"
+    ]
+  },
+  {
+  "intent": "get_random_transcripts",
+  "description": "Mevcut (cleaned) transcript’lerden rastgele N tanesini getirir",
+  "examples": [
+    "Bana random 5 transcript göster",
+    "Elinde kaç tane temiz metin varsa rastgele 10 tanesini ver",
+    "Örnek konuşma metinleri lazım – rastgele seç"
+  ]
+  }
+]

@@ -319,7 +319,11 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
                 log.warning("call_id %s temizlenemedi: %s", rec["call_id"], e)
 
         missing_call_ids = [d["call_id"] for d in docs if not d.get("cleaned_transcript")]
-        if missing_call_ids:
+        needs_audio = {"enqueue_transcription_job", "get_transcripts_by_customer_num",
+               "get_transcript_by_call_id", "get_random_transcripts",
+               "call_insights", "mini_rag"}   # transcript/özet isteyen adımlar
+
+        if missing_call_ids and needs_audio & requested_tools:
             queue_utils.enqueue_downloads(missing_call_ids)
 
         requested_tools = {s.get("name") for s in plan}

@@ -26,6 +26,20 @@
 
 7.  Birden fazla `call_id`, `customer_num` veya tarih aralığı geçiyorsa → ilgili alanı **dizi** olarak çıkar.
 
+8.  **Göreli (belirsiz) tarih ifadeleri**  
+    Aşağıdaki kalıplar, bugünün ({today}) tarihine göre ISO-8601 string’lerine çevrilir ve  
+    pipeline’da **calls.call_date** alanına `$gte / $lte` şeklinde yansıtılır.
+
+    | İfade                   | $gte                  | $lte                  | Açıklama |
+    |-------------------------|-----------------------|-----------------------|----------|
+    | “dün”                  | {today-1d}             | {today-1d}            | Tek gün |
+    | “son 7 gün”, “geçen hafta” | {today-7d}         | {today-1d}            | Aralık |
+    | “1 hafta önce”         | {today-7d}             | {today-7d}            | Tek gün |
+    | “1 ay önce”            | {today-30d}            | {today-30d}           | Tek gün |
+    | “son 30 gün”           | {today-30d}            | {today}               | Aralık |
+    | “12 Haz 2024 – 12 Haz 2025” | 2024-06-12        | 2025-06-12            | Belirtilen aralık |
+    | “12.05.2023 – 12.05.2024”   |	2023-05-12	      | 2024-05-12	          |Gün • Ay • Yıl aralığı
+
 ---
 
 ## 2 · İstenen Çıktıyı Belirleme Kuralları
@@ -38,6 +52,7 @@
 | “süre”, “kaç saniye”, “kaç dk” | `duration` | Toplam konuşma süresi istenir. |
 | “agent puanı”, “temsilci skoru” | `agent_score` | analytics servisinden puan hesaplaması gerekir. |
 | “özet”, “analiz”,“değerlendirme”,“öneri” | `call_insights` | Çağrıdan satış-insight (özet, profil, puanlama, öneriler) |
+| “kim”, “kimle”, “kiminle” (+agent) | `contact_num` | Agent-merkezli sorgularda müşteri numarası döndür. Inbound → caller_id, Outbound → called_num. |
 
 > Model, bu tabloda eşleşme bulamazsa varsayılan olarak “transkript” (`cleaned_transcript`) beklenir.
 
@@ -120,6 +135,19 @@
   }
 }
 
+
+---
+
+## 2.4 · Çoklu Intent İşleme
+
+Kullanıcı aynı cümlede birden fazla istek belirtirse:
+
+1. **Her istek için ayrı `tool_call`** üret.  
+2. Her `tool_call` JSON’una `"intent": "<intent_adı>"` ekle ✱  
+3. Ardışık bağımlılık varsa (ör. önce transcript, sonra özet) mantıksal sırayı koru.  
+4. Çakışan veya belirsiz alan varsa → tek adım  
+   ```json
+   [{"name":"report_problem","arguments":{"reason":"Çelişkili istek"}}]
 
 ---
 

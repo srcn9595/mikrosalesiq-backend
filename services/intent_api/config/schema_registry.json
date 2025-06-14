@@ -1,36 +1,104 @@
 {
   "audio_jobs": {
-    "customer_num": "string",
-    "job_status": "string",
-    "calls": [
-      {
-        "call_id": "string",
-        "agent_email": "string",
-        "call_date": "datetime",
-        "direction": "string",
-        "status": "string",
-        "duration": "int",
-        "cleaned_transcript": "string"
+    "type": "object",
+    "description": "Müşteri bazlı tüm çağrı işleri ve mini-RAG çıktıları",
+    "properties": {
+      "customer_num": { "type": "string" },
+      "job_status":   { "type": "string" },
+
+      "calls": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "call_id":           { "type": "string" },
+            "call_key":          { "type": "string",  "description": "AloTech storage key" },
+            "agent_email":       { "type": "string" },
+            "call_date":         { "type": "datetime" },
+            "direction":         { "type": "string", "enum": ["inbound","outbound"] },
+            "status":            { "type": "string", "enum": ["queued","downloaded","transcribed","cleaned"] },
+
+            "duration":          { "type": "number" },
+            "downloaded_at":     { "type": "datetime" },
+            "file_path":         { "type": "string" },
+            "transcribed_at":    { "type": "datetime" },
+
+            "transcript":        { "type": "string" },
+            "cleaned_at":        { "type": "datetime" },
+            "cleaned_transcript":{ "type": "string" }
+          },
+          "required": ["call_id","agent_email","call_date","status"]
+        }
+      },
+
+      "mini_rag": {
+        "type": "object",
+        "description": "Müşteri bazlı özet ve skorlar",
+        "properties": {
+          "summary":          { "type": "string" },
+          "confidence":       { "type": "number" },
+          "token_count":      { "type": "number" },
+
+          "customer_profile": {
+            "type": "object",
+            "properties": {
+              "personality_type": { "type": "string" },
+              "role":             { "type": "string" },
+              "sector":           { "type": "string" },
+              "needs":            { "type": "array", "items": { "type": "string" } },
+              "zorluk_seviyesi":  { "type": "string" },
+              "müşteri_kaynağı":  { "type": "string" },
+              "inceleme_durumu":  { "type": "string" }
+            }
+          },
+
+          "sales_scores": {
+            "type": "object",
+            "properties": {
+              "discovery":     { "type": "number" },
+              "communication": { "type": "number" },
+              "objection":     { "type": "number" },
+              "features":      { "type": "number" },
+              "closing":       { "type": "number" }
+            }
+          },
+
+          "recommendations": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+
+          "merged_transcript": { "type": "string" },
+          "generated_at":      { "type": "number" }
+        }
       }
-    ]
+    },
+    "required": ["customer_num","calls"]
   },
+
   "call_records": {
-    "call_id": "string",
-    "agent_email": "string",
-    "agent_name": "string",
-    "caller_id": "string",
-    "called_num": "string",
-    "call_date": "datetime",
-    "duration": "int",
-    "is_inbound": "bool"
+    "type": "object",
+    "description": "Ham CDR kayıtları (AloTech)",
+    "properties": {
+      "call_id":     { "type": "string" },
+      "agent_email": { "type": "string" },
+      "agent_name":  { "type": "string" },
+      "caller_id":   { "type": "string" },
+      "called_num":  { "type": "string" },
+      "call_date":   { "type": "datetime" },
+      "duration":    { "type": "number" },
+      "is_inbound":  { "type": "boolean" }
+    },
+    "required": ["call_id","call_date"]
   },
+
   "call_insights": {
     "type": "object",
+    "description": "Tek bir çağrıya ait satış-analiz çıktısı",
     "properties": {
-      "call_id":   { "type": "string" },
-      "customer_num": { "type": "string" },
-
-      "summary":   { "type": "string" },
+      "call_id":       { "type": "string" },
+      "customer_num":  { "type": "string" },
+      "summary":       { "type": "string" },
 
       "customer_profile": {
         "type": "object",
@@ -38,12 +106,9 @@
           "personality_type": { "type": "string" },
           "role":             { "type": "string" },
           "sector":           { "type": "string" },
-          "needs": {
-            "type": "array",
-            "items": { "type": "string" }
-          }
-       },
-       "required": ["personality_type", "role", "sector"]
+          "needs":            { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["personality_type","role","sector"]
       },
 
       "sales_scores": {
@@ -54,8 +119,7 @@
           "objection":     { "type": "number" },
           "features":      { "type": "number" },
           "closing":       { "type": "number" }
-        },
-        "additionalProperties": false
+        }
       },
 
       "recommendations": {
@@ -63,7 +127,6 @@
         "items": { "type": "string" }
       }
     },
-    "required": ["call_id", "summary"]
+    "required": ["call_id","summary"]
   }
-
 }

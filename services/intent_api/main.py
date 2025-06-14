@@ -6,6 +6,8 @@ from openai import OpenAI
 from langfuse import Langfuse
 from dotenv import load_dotenv
 import logging
+import re
+from datetime import datetime, timedelta
 
 ROOT_DIR   = pathlib.Path(__file__).parent
 CONFIG_DIR = ROOT_DIR / "config"
@@ -14,7 +16,7 @@ load_dotenv(ROOT_DIR / ".env")
 # ── statik dosyalar ---------------------------------------------------------
 SYSTEM_PROMPT = (CONFIG_DIR / "system_prompt.txt").read_text(encoding="utf-8")
 TOOL_MANIFEST = json.loads((ROOT_DIR / "tool_manifest.json").read_text())
-
+_REL_RE = re.compile(r"{today([+-]\d+)([dwmy])}")
 # ── FastAPI + OpenAI + Langfuse --------------------------------------------
 app = FastAPI()
 
@@ -26,20 +28,60 @@ langfuse = Langfuse(
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ───────────────────────── helpers ─────────────────────────────────────────
-def build_messages(user_query: str) -> list[dict]:
-    today = datetime.now().strftime("%Y-%m-%d")
+def _resolve_relative_dates(text: str) -> str:
+    """
+    {today±Nd}, {today±Nw}, {today±Nm}, {today±Ny} makrolarını
+    gerçek ISO-8601 tarihlere çevirir.
+    """
+    def _sub(m):
+        offset = int(m.group(1))
+        unit   = m.group(2)
+        base   = datetime.utcnow().date()
 
+        if unit == "d":
+            real = base + timedelta(days=offset)
+        elif unit == "w":
+            real = base + timedelta(weeks=offset)
+        elif unit == "m":
+            # Ay için kaba ≈30 gün (gelişmiş ihtiyaçta dateutil.relativedelta kullanın)
+            real = base + timedelta(days=30 * offset)
+        elif unit == "y":
+            real = base + timedelta(days=365 * offset)
+        else:
+            return m.group(0)           # bilinmeyen; dokunma
+
+        return real.isoformat()
+    return _REL_RE.sub(_sub, text)
+
+
+
+def build_messages(user_query: str) -> list[dict]:
+    today_iso = datetime.utcnow().date().isoformat()
+
+    # statik dosyalar
     schema_json   = (CONFIG_DIR / "schema_registry.json").read_text()
     heuristics_md = (CONFIG_DIR / "heuristics.md").read_text()
     examples_md   = (CONFIG_DIR / "prompt_examples.md").read_text()
+    intents_json  = (CONFIG_DIR / "intents.json").read_text()
 
+    # önce {today} makrosu
+    sys_prompt = SYSTEM_PROMPT.replace("{today}", today_iso)
+
+    # prompt dosyalarının hepsine aynı işlemi uygulamak gerekebilir
+    # (örneklerde de {today-…} geçiyorsa)
+    sys_prompt = _resolve_relative_dates(sys_prompt)
+    examples_md = _resolve_relative_dates(examples_md)
+
+    # kalan yer tutucuları
     sys_prompt = (
-        SYSTEM_PROMPT
-        .replace("{today}", today)
+        sys_prompt
         .replace("{{schema_registry}}", schema_json)
-        .replace("{{heuristics}}",     heuristics_md)
-        .replace("{{prompt_examples}}", examples_md)
+        .replace("{{heuristics}}",       heuristics_md)
+        .replace("{{prompt_examples}}",  examples_md)
+        .replace("{{intents_json}}",     intents_json)
     )
+
+    # son olarak “JSON döndür” hatırlatıcısı
     sys_prompt = "You MUST answer in valid JSON.\n\n" + sys_prompt
 
     return [
@@ -96,11 +138,13 @@ def tidy(step: dict) -> dict:
 
     # 1) zaten doğru form
     if "name" in step and "arguments" in step:
+        step["name"] = step["name"].removeprefix("functions.")
         return step
 
     # 2) OpenAI parallel elemanı
     if "recipient_name" in step and "parameters" in step:
         name = step["recipient_name"].removeprefix("functions.")
+        step["name"] = step["name"].removeprefix("functions.")
         return {"name": name, "arguments": step["parameters"]}
 
     # 3) Basit {'name', 'parameters'} formu
@@ -125,12 +169,12 @@ async def analyze(req: Request):
             # ② Generation span: openai.plan
             with langfuse.start_as_current_generation(
                 name="openai.plan",
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 input={"messages": build_messages(query)}
             ) as gen:
 
                 resp = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o",
                     tools=TOOL_MANIFEST,
                     messages=build_messages(query),
                     response_format={"type": "json_object"},
