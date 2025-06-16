@@ -5,6 +5,7 @@ import json
 import logging
 import pymongo
 from dotenv import load_dotenv
+from queue_utils import _MINI_RAG_ENQUEUED_SET, rds 
 
 from mini_rag.mini_rag_utils import (
     build_mini_rag_payload,
@@ -39,6 +40,7 @@ def generate_mini_rag_output(customer_num: str) -> dict:
         {
             "call_id": c.get("call_id"),
             "call_date": c.get("call_date"),
+            "agent_email":  c.get("agent_email"),
             "transcript": c.get("cleaned_transcript")
         }
         for c in doc.get("calls", [])
@@ -64,6 +66,7 @@ def generate_mini_rag_output(customer_num: str) -> dict:
         confidence=confidence,
         token_count=token_count
     )
-
+    rds.srem(_MINI_RAG_ENQUEUED_SET, customer_num)
+    log.info("SET’ten silindi: %s", customer_num)
     log.info(f"✅ Mini-RAG senkron tamamlandı: {customer_num}")
     return parsed

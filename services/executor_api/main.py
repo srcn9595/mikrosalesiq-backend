@@ -7,12 +7,11 @@ import logging
 import redis
 import pymongo
 from typing import Any, Dict, List
-from queue_utils import enqueue_mini_rag
 from fastapi.responses import JSONResponse
 from bson import json_util
 import json
-from queue_utils import is_mini_rag_enqueued
 from mini_rag.mini_rag_sync_worker import generate_mini_rag_output 
+
 import mongo_utils
 import queue_utils
 from clean_transcript.clean_sync_worker import clean_transcript_sync
@@ -204,6 +203,8 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
     try:
         log.info("execute_plan çağrıldı. Plan: %s", plan)
 
+        requested_tools = {s.get("name") for s in plan}
+
         # ───────────── get_mini_rag_summary (çoklu & senkron) ─────────────
         summary_steps = [s for s in plan if s.get("name") == "get_mini_rag_summary"]
         if summary_steps:
@@ -287,6 +288,7 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
             return {"message": "Agent e-mail için regex içeren sorgular desteklenmiyor."}
 
         docs = list(db[coll_name].aggregate(pipeline))
+        
         if not docs:
             return {"message": "Girilen kriterlere uygun kayıt bulunamadı."}
 
@@ -318,15 +320,39 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
             except Exception as e:
                 log.warning("call_id %s temizlenemedi: %s", rec["call_id"], e)
 
-        missing_call_ids = [d["call_id"] for d in docs if not d.get("cleaned_transcript")]
-        needs_audio = {"enqueue_transcription_job", "get_transcripts_by_customer_num",
+        
+        needs_audio_tools = {"enqueue_transcription_job", "get_transcripts_by_customer_num",
                "get_transcript_by_call_id", "get_random_transcripts",
                "call_insights", "mini_rag"}   # transcript/özet isteyen adımlar
 
-        if missing_call_ids and needs_audio & requested_tools:
-            queue_utils.enqueue_downloads(missing_call_ids)
+        tools_demand_text = bool(needs_audio_tools & requested_tools)
+        # $project’ta transcript/cleaned_transcript alanı var mı?
+        def project_wants_text(ppl):
+            for st in ppl:
+                if "$project" in st:
+                    keys = st["$project"].keys()
+                    if ("transcript" in keys ) or ("cleaned_transcript" in keys):
+                        return True
+            return False
+        
+        pipeline_wants_text = project_wants_text(pipeline)
 
-        requested_tools = {s.get("name") for s in plan}
+        missing_call_ids = [d["call_id"] for d in docs if not d.get("cleaned_transcript")]
+
+        if missing_call_ids and (tools_demand_text or pipeline_wants_text):
+            qinfo = queue_utils.enqueue_downloads(missing_call_ids)
+
+            for d in docs:
+                cid = d["call_id"]
+                if cid in qinfo["new_items"]:
+                    d["message"] = "Transcript hazır değil. Kuyruğa alındı."
+                elif cid in qinfo["already_items"]:
+                    pos = qinfo["positions"].get(cid)
+                    if pos:
+                        d["message"] = f"Transcript hazır değil • **zaten sırada** (#{pos})"
+                    else:
+                        d["message"] = "Transcript hazır değil • **işleniyor**"
+
         if requested_tools == {"mongo_aggregate"}:
             return JSONResponse(content={
                 "results": [{"name": "mongo_aggregate", "output": bson_safe(docs)}]

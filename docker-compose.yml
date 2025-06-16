@@ -1,15 +1,6 @@
 
 services:
 
-  # 1) MongoDB servisi
-  mongodb:
-    image: mongo:7
-    restart: always
-    ports:
-      - "27018:27017"
-    volumes:
-      - ./mongo_data:/data/db
-
   # 2) Redis servisi
   redis:
     image: redis:7-alpine
@@ -31,8 +22,7 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_HOST}
-    depends_on:
-      - mongodb
+
 
   # 4) transcript_api servisi
   transcript_api:
@@ -49,8 +39,6 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_HOST}
-    depends_on:
-      - mongodb
 
   # 5) gateway_api servisi
   gateway_api:
@@ -86,7 +74,6 @@ services:
       - MONGO_DB=${MONGO_DB}
       - REDIS_URL=${REDIS_URL}
     depends_on:
-      - mongodb
       - redis
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
@@ -108,7 +95,6 @@ services:
       - ALO_REC_API_TEMPLATE=${ALO_REC_API_TEMPLATE}
       - DOWNLOAD_ROOT=${DOWNLOAD_ROOT}
     depends_on:
-      - mongodb
       - redis
     command: python download_worker.py
     volumes:
@@ -128,8 +114,8 @@ services:
       - DOWNLOAD_ROOT=${DOWNLOAD_ROOT}
       - OUTPUT_ROOT=${OUTPUT_ROOT}
       - HF_TOKEN=${HF_TOKEN}
+      - HF_HUB_ENABLE_HF_TRANSFER=${HF_HUB_ENABLE_HF_TRANSFER}
     depends_on:
-      - mongodb
       - redis
     command: python transcribe_worker.py
     volumes:
@@ -150,7 +136,6 @@ services:
       - OUTPUT_ROOT=${OUTPUT_ROOT}
       - CLEANED_OUTPUT_ROOT=${CLEANED_OUTPUT_ROOT}
     depends_on:
-      - mongodb
       - redis
     command: python -m clean_transcript.clean_worker
     volumes:
@@ -173,7 +158,23 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_HOST}
     depends_on:
-      - mongodb
       - redis
     command: python -m  mini_rag.mini_rag_worker
+
+    # 11) Keycloak servisi
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.3
+    command: start-dev --import-realm
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./.env
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+
+  
 

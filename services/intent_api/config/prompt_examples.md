@@ -82,11 +82,19 @@
       pipeline:
         - $match:
             $or:
-              - caller_id: "05445118257"
+              - caller_id:  "05445118257"
               - called_num: "05445118257"
-        - $sort: { call_date: -1 }
+        - $sort:  { call_date: -1 }
         - $limit: 1
-        - $project: { _id: 0, call_id: "$call_id", call_date: "$call_date", agent_email: "$agent_email" }
+        - $project:
+            _id:         0
+            call_id:     "$call_id"
+            call_date:   "$call_date"
+            agent_email: "$agent_email"
+            agent_name:  "$agent_name"
+            customer_num:
+              $cond: [ "$is_inbound", "$caller_id", "$called_num" ]
+
 
 # 8 — MULTI-INTENT: transcript + overview
 - user: "05320122474 numarasının tüm transcriptlerini ver, sonra genel özetini çıkart"
@@ -165,7 +173,7 @@
         - $project: { _id:0, call_id:"$calls.call_id",
                              transcript:"$calls.cleaned_transcript" }
 
-# 14 — AGENT CONTACT LIST (son 2 ay, inbound+outbound ayrımı)
+# 14 — AGENT’S CONTACTS (son 60 gün, inbound+outbound)
 - user: "arda.eksioglu@parasut.com son 2 ayda kimlerle görüşmüş?"
   tool_call:
     name: mongo_aggregate
@@ -177,11 +185,15 @@
             agent_email: "arda.eksioglu@parasut.com"
             call_date: { $gte: "{today-2m}" }
         - $project:
-            _id: 0
-            call_id:    "$call_id"
-            call_date:  "$call_date"
+            _id:          0
+            call_id:      "$call_id"
+            customer_num: "$customer_num"
+            call_date:    "$call_date"
+            agent_email:  "$agent_email"
+            agent_name:   "$agent_name"
             customer_num:
               $cond: [ "$is_inbound", "$caller_id", "$called_num" ]
+
 
 
 # 15 — RANDOM N TRANSCRIPTS + AGENT
@@ -198,7 +210,9 @@
         - $project:
             _id: 0
             call_id: "$calls.call_id"
+            customer_num:"$customer_num"
             agent_email: "$calls.agent_email"
+            agent_name: "$calls.agent_name"
             transcript: "$calls.cleaned_transcript"
 
 

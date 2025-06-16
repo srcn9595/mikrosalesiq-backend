@@ -6,7 +6,7 @@ import logging
 import pymongo
 import redis
 from dotenv import load_dotenv
-
+from queue_utils import _MINI_RAG_ENQUEUED_SET, rds 
 from mini_rag.mini_rag_utils import (
     build_mini_rag_payload,
     merge_transcripts,
@@ -60,6 +60,7 @@ def get_cleaned_transcripts_ordered(customer_num: str):
         {
             "call_id":    c.get("call_id"),
             "call_date":  c.get("call_date"),
+            "agent_email":  c.get("agent_email"),
             "transcript": c.get("cleaned_transcript")
         }
         for c in sorted_calls
@@ -135,7 +136,8 @@ def run():
             confidence=confidence,
             token_count=token_count
         )
-
+        rds.srem(_MINI_RAG_ENQUEUED_SET, customer_num)
+        log.info("SET’ten silindi: %s", customer_num)
         log.info(f"✅ Mini-RAG tamamlandı: {customer_num} (tokens={token_count})")
 
 

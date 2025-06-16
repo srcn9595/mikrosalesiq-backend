@@ -34,15 +34,18 @@ def merge_transcripts(transcripts: List[Dict[str, Any]]) -> str:
             continue
         call_id = t.get("call_id", "unknown_call_id")
         timestamp = t.get("call_date", "unknown_time")
+        agent_email = t.get("agent_email", "unknown_agent")
         formatted.append(
-            f"🟩 call_id: {call_id}\n🗓️  call_date: {timestamp}\n\n{t['transcript']}"
+            f"🟩 call_id: {call_id}\n"
+            f"👤 agent_email: {agent_email}\n"
+            f"🗓️  call_date: {timestamp}\n\n"
+            f"{t['transcript']}"
         )
     return "\n\n---\n\n".join(formatted)
 
 
 def calculate_confidence(total_tokens: int, expected_min: int = 1) -> float:
     return min(total_tokens / expected_min, 1.0)
-
 
 def build_mini_rag_payload(transcripts: List[Dict[str, Any]]) -> Dict[str, Any]:
     merged = merge_transcripts(transcripts)

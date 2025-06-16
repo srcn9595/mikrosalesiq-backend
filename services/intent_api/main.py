@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import logging
 import re
 from datetime import datetime, timedelta
-
+from openai.types.chat import ChatCompletionMessageToolCall
 ROOT_DIR   = pathlib.Path(__file__).parent
 CONFIG_DIR = ROOT_DIR / "config"
 load_dotenv(ROOT_DIR / ".env")
@@ -139,6 +139,8 @@ def tidy(step: dict) -> dict:
     # 1) zaten doğru form
     if "name" in step and "arguments" in step:
         step["name"] = step["name"].removeprefix("functions.")
+        if "intent" in step:
+            step["intent"] = step["intent"]
         return step
 
     # 2) OpenAI parallel elemanı
@@ -182,7 +184,16 @@ async def analyze(req: Request):
                 )
 
                 msg_raw = resp.choices[0].message
-                raw     = msg_raw.tool_calls or json.loads(msg_raw.content)
+                if msg_raw.tool_calls:                       # yeni SDK yolu
+                     raw = [
+                        {                                    # normalize_plan / tidy beklediği format
+                            "name": tc.function.name,
+                            "arguments": json.loads(tc.function.arguments)
+                  }
+                   for tc in msg_raw.tool_calls         # tc: ChatCompletionMessageToolCall
+                ]
+                else:                                        # eski (content) yolu
+                    raw = json.loads(msg_raw.content)
                 try:
                     steps   = normalize_plan(raw)
                 except Exception as e:

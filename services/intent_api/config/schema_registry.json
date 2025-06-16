@@ -14,6 +14,7 @@
             "call_id":           { "type": "string" },
             "call_key":          { "type": "string",  "description": "AloTech storage key" },
             "agent_email":       { "type": "string" },
+            "agent_name":        { "type": "string" },
             "call_date":         { "type": "datetime" },
             "direction":         { "type": "string", "enum": ["inbound","outbound"] },
             "status":            { "type": "string", "enum": ["queued","downloaded","transcribed","cleaned"] },

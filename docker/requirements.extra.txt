@@ -1,3 +1,4 @@
 langfuse
 redis
 motor
+hf_transfer
