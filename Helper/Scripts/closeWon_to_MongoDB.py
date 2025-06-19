@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 # ─────── AYARLAR ───────
 MONGO_URI   = "mongodb://localhost:27017/"
-DB_NAME     = "alotech"
+DB_NAME     = "mikrosalesiq"
 COLL_NAME   = "sf_close_won_raw"       # ← aynı adı kullanalım
 EXCEL_FILE  = "close_won.xlsx"         # *.xlsx olduğundan openpyxl yeter
 

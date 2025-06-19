@@ -242,17 +242,27 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
                         log.warning("clean fail %s: %s", c["call_id"], e)
 
                 # ➍ Temizlik sonrası özet üretebilir miyiz?
-                if any(c.get("cleaned_transcript") for c in
-                       audio_coll.find_one({"customer_num":cnum},
-                                           {"calls.cleaned_transcript":1})["calls"]):
+                calls_doc = audio_coll.find_one({"customer_num": cnum},{"calls.call_id":1,"calls.cleaned_transcript":1})["calls"]
+                total_calls = len(calls_doc)
+                cleaned_calls   = [c for c in calls_doc if c.get("cleaned_transcript")]
+                missing_callids = [c["call_id"] for c in calls_doc if not c.get("cleaned_transcript")]
+
+                # Bütün görüşmeler temizlenmişse özet üret
+                if total_calls > 0 and len(cleaned_calls) == total_calls:
                    try:
                        parsed = generate_mini_rag_output(cnum)
                        results.append({"name":"get_mini_rag_summary","output":parsed})
                        continue
                    except Exception as ex:
                       log.error("miniRAG %s err: %s", cnum, ex)
+                
+                # ➎ Eksikler varsa → ilgili kuyruklara gönder
+                if missing_callids:
+                    dl_info = queue_utils.enqueue_downloads(missing_callids)
+                    log.info("Eksik %s çağrı download kuyruğuna alındı: %s", cnum, dl_info)
 
-                # ➎ Hiç transcript yok → kuyruk bilgisi
+
+                # ➏ Mini-RAG kuyruğu (özet daha sonra üretilecek)
                 q = queue_utils.enqueue_mini_rag(cnum)
                 status = "zaten sırada" if q["already_enqueued"] else "kuyruğa eklendi"
                 queue_msgs.append(f"{cnum} {status} "

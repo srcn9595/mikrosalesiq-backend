@@ -3,7 +3,7 @@
 import pymongo, sys
 
 MONGO_URI = "mongodb://localhost:27017/"
-DB        = "alotech"
+DB        = "mikrosalesiq"
 
 cli   = pymongo.MongoClient(MONGO_URI)
 won   = cli[DB]["sf_close_won_raw"]

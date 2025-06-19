@@ -1,0 +1,144 @@
+/* styles.css */
+
+/* ────────────────────────────────
+   Global CSS Variables (Light Mode)
+──────────────────────────────── */
+:root {
+  --font-base: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+  --color-bg: #f9fafb;
+  --color-text: #1f2937;
+  --color-muted: #6b7280;
+  --color-border: #d1d5db;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-accent: #1e3a8a;
+  --color-card-bg: #ffffff;
+  --color-input-bg: #ffffff;
+  --color-shadow: rgba(0, 0, 0, 0.08);
+}
+
+/* ────────────────────────────────
+   Dark Mode Overrides
+──────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f172a;
+    --color-text: #f8fafc;
+    --color-muted: #94a3b8;
+    --color-border: #334155;
+    --color-card-bg: #1e293b;
+    --color-input-bg: #1e293b;
+    --color-shadow: rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ────────────────────────────────
+   Base
+──────────────────────────────── */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-base);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* ────────────────────────────────
+   Login
+──────────────────────────────── */
+.login-wrapper {
+  display: flex;
+  height: 100vh;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+}
+
+.login-box {
+  background: var(--color-card-bg);
+  padding: 2.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px var(--color-shadow);
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+
+.logo {
+  height: 64px;
+  margin-bottom: 1rem;
+  object-fit: contain;
+}
+
+.login-header h1 {
+  font-size: 1.875rem;
+  margin: 0;
+  color: var(--color-accent);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  margin-bottom: 1.5rem;
+}
+
+.footer {
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+/* ────────────────────────────────
+   Form Elements
+──────────────────────────────── */
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  border: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  width: 100%;
+  background-color: var(--color-input-bg);
+  color: var(--color-text);
+  outline: none;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+}
+
+button {
+  font-weight: 600;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+/* ────────────────────────────────
+   Utility Classes
+──────────────────────────────── */
+.text-center {
+  text-align: center;
+}
+
+.text-sm {
+  font-size: 0.875rem;
+}
+
+.text-muted {
+  color: var(--color-muted);
+}
+
+.font-bold {
+  font-weight: 700;
+}

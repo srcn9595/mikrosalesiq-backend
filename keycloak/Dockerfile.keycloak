@@ -1,0 +1,7 @@
+# Backend/keycloak/Dockerfile.keycloak
+FROM quay.io/keycloak/keycloak:24.0.3
+
+# (İsteğe bağlı tema)
+COPY themes /opt/keycloak/themes
+
+# Resmî entrypoint ve default CMD yeterli

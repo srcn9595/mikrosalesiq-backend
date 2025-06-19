@@ -4,7 +4,7 @@
 import re, pymongo
 from typing import Optional   
 MONGO_URI = "mongodb://localhost:27017/"
-DB_NAME   = "alotech"
+DB_NAME   = "mikrosalesiq"
 
 cli  = pymongo.MongoClient(MONGO_URI)
 db   = cli[DB_NAME]
