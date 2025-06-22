@@ -106,5 +106,24 @@
     "Elinde kaç tane temiz metin varsa rastgele 10 tanesini ver",
     "Örnek konuşma metinleri lazım – rastgele seç"
   ]
-  }
+  },
+  {
+  "intent": "get_opportunity_info",
+  "description": "Bir müşteri fırsatının aşama, kapanış tarihi, kaybedilme sebebi vb. CRM alanlarını getirir",
+  "examples": [
+    "05011345074 fırsat hangi aşamada?",
+    "Bu müşterinin kapanış tarihi ne?",
+    "Lead kaynağı nedir?",
+    "Neden kaybedilmiş?"
+  ]
+},
+{
+  "intent": "get_contact_info",
+  "description": "Müşteriye ait iletişim adını ve e-posta adresini getirir",
+  "examples": [
+    "05011345074 iletişim e-postası nedir?",
+    "Bu müşterinin adı kim?",
+    "contact email 0532…"
+  ]
+}
 ]

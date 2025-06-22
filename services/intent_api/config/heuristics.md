@@ -2,9 +2,8 @@
 ## 1 · Alan Tanıma Kuralları
 1.  'ast' ile başlayan dize → **call_id**
 
-2.  05 ile başlayan 11 haneli sayı → **customer_num**  
-    · inbound arama → `call_records.caller_id`  
-    · outbound arama → `call_records.called_num`
+2. 05 … ile başlayan 11 haneli sayı → **customer_num**  
+   · Doğrudan `audio_jobs.customer_num` alanıyla eşleştirilir.
 
 3.  “@parasut.com” ile biten dize → **agent_email**
 
@@ -39,6 +38,22 @@
     | “son 30 gün”           | {today-30d}            | {today}               | Aralık |
     | “12 Haz 2024 – 12 Haz 2025” | 2024-06-12        | 2025-06-12            | Belirtilen aralık |
     | “12.05.2023 – 12.05.2024”   |	2023-05-12	      | 2024-05-12	          |Gün • Ay • Yıl aralığı
+    
+9.  “Closed Won”, “Closed Lost”, “Prospecting”, “Kazanıldı”, “Kaybedildi” → **opportunity_stage**
+
+10. “kaynak”, “lead kaynağı”, “lead_source” → **lead_source**
+
+11. “kapanış tarihi”, “close date”, “kapanma tarihi” → **close_date**
+
+12. “oluşturulma tarihi”, “created date”, “ilk kayıt” → **created_date**
+
+13. “paket(ler)”, “ürün listesi”, “product_lookup” → **product_lookup**
+
+14. “kaybedilme sebebi”, “lost reason” → **lost_reason**
+
+15. “iletişim e-posta”, “müşteri e-postası”, “contact_email” → **contact_email**
+
+16. “iletişim adı”, “müşteri adı”, “contact_name” → **contact_name**
 
 ---
 
@@ -46,15 +61,22 @@
 > Kullanıcı hangi alanı talep ediyor?
 
 | Anahtar Kelimeler | target / intent | Açıklama |
-|-------------------|-----------------|----------|
-| “transkript”, “metin”, “yazıya dök” | `cleaned_transcript` | `audio_jobs.calls.cleaned_transcript` alanı istenir; yoksa iş kuyruğu. |
-| “ses kaydı”, “wav”, “mp3” | `file_path` | WAV dosyasına ilişkin link veya S3 key istenir. |
-| “süre”, “kaç saniye”, “kaç dk” | `duration` | Toplam konuşma süresi istenir. |
-| “agent puanı”, “temsilci skoru” | `agent_score` | analytics servisinden puan hesaplaması gerekir. |
-| “özet”, “analiz”,“değerlendirme”,“öneri” | `call_insights` | Çağrıdan satış-insight (özet, profil, puanlama, öneriler) |
-| “kim”, “kimle”, “kiminle” (+agent) | `contact_num` | Agent-merkezli sorgularda müşteri numarası döndür. Inbound → caller_id, Outbound → called_num. |
+|---|---|---|
+| “transkript”, “metin”, “yazıya dök” | `cleaned_transcript` | `audio_jobs.calls.cleaned_transcript`; yoksa kuyruğa alınır. |
+| “ses kaydı”, “wav”, “mp3” | `file_path` | Ses dosyasının S3 anahtarı / URL’si → `audio_jobs.calls.file_path`. |
+| “süre”, “kaç saniye”, “kaç dk” | duration | Toplam konuşma süresi (audio_jobs.calls.duration). |
+| “agent puanı”, “temsilci skoru” | `agent_score` | Analytics servisinden temsilci performans puanı. |
+| “özet”, “analiz”, “değerlendirme”, “öneri” | `call_insights` | Satış-içgörü (özet + profil + puanlama + öneriler). |
+| “kim”, “kimle”, “kiminle” (+agent) | `contact_num` | Agent merkezli sorguda müşteri numarası (Inbound → `caller_id`, Outbound → `called_num`). |
+| “paket”, “ürün”, “product” | `product_lookup` | Satın alınan paket / modül → `audio_jobs.product_lookup`. |
+| “kapanış tarihi”, “close date” | `close_date` | `audio_jobs.close_date`. |
+| “fırsat aşaması”, “opportunity stage”, “kazanıldı mı” | `opportunity_stage` | `audio_jobs.opportunity_stage`. |
+| “lead kaynağı”, “kaynak” | `lead_source` | `audio_jobs.lead_source`. |
+| “kaybedilme sebebi”, “lost reason” | `lost_reason` | `audio_jobs.lost_reason` veya `lost_reason_detail`. |
+| “müşteri e-postası”, “iletişim e-posta” | `contact_email` | `audio_jobs.contact_email`. |
+| “müşteri adı”, “iletişim adı” | `contact_name` | `audio_jobs.contact_name`. |
 
-> Model, bu tabloda eşleşme bulamazsa varsayılan olarak “transkript” (`cleaned_transcript`) beklenir.
+> Model tabloda eşleşme bulamazsa **varsayılan** olarak “transkript” (`cleaned_transcript`) alanını getirir.
 
 ---
 
@@ -69,6 +91,10 @@
 - **Neden?**  
   - `execute_plan` fonksiyonunuz, her zaman `docs[i]["call_id"]` üzerinden ilerliyor. Eğer pipeline `$project` aşamasında `call_id` yoksa, `KeyError: 'call_id'` hatası alıyorsunuz.  
   - Bu kural sayesinde tüm planlarda “call_id” birinci öncelikli alandır ve downstream kodunuz eksiksiz çalışır.
+
+  • call_id alanı **yalnızca call-level** sonuçlar için zorunludur.  
+  • customer-level alanlarda (contact_email, opportunity_stage, sales_scores …) call_id beklenmez.
+
 
 ## 2.2 · `call_insights` İçin Ekstra Heuristikler
 

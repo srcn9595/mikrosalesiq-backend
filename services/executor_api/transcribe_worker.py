@@ -17,6 +17,9 @@ import whisperx
 from pyannote.audio import Pipeline as DiarPipeline
 from pyannote.core import Annotation
 
+from kvkk_guard import mask_sensitive_info
+
+
 # ───────────────────────────── LOGGING ─────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -167,6 +170,7 @@ def main(poll_interval: int = 5):
             diar     = diarize_model({"uri": call_id, "audio": seekable})
             aligned  = align_segments_with_speakers(result["segments"], diar)
             text     = format_raw_output(aligned, customer_num, agent_email)
+            text     = mask_sensitive_info(text) # ➊ KVKK maskeleme
 
             out_dir = Path(OUTPUT_ROOT) / customer_num
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -176,7 +180,8 @@ def main(poll_interval: int = 5):
                 {"calls.call_id": call_id},
                 {"$set": {
                     "calls.$.status": "transcribed",
-                    "calls.$.transcript": text,
+                    "calls.$.raw_transcript": format_raw_output(aligned, customer_num, agent_email),  # Maskelemeden önce
+                    "calls.$.transcript": text,  # Maske sonrası
                     "calls.$.transcribed_at": datetime.utcnow()
                 }}
             )

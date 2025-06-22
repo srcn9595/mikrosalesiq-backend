@@ -9,7 +9,7 @@ from pymongo import UpdateOne, ASCENDING
 
 # ──────────── Yapılandırma ────────────
 MONGO_URI      = "mongodb://localhost:27017/"
-DB_NAME        = "alotech"
+DB_NAME        = "mikrosalesiq"
 COLLECTION     = "call_records"
 SYNC_COLL      = "sync_state"
 SYNC_ID        = "calls_sync"

@@ -60,12 +60,11 @@ def main(poll_interval: int = 5):
             )
             continue
         customer_num = doc["customer_num"]
-        agent_email  = call.get("agent_email", "Temsilci")
-
+        call_date    = call.get("call_date", "Tarih bilinmiyor")
         try:
             chunks = chunks_by_tokens(raw_text, 8000)
             cleaned = "\n\n".join(
-                generate_cleaned_transcript_sync(call_id, part, customer_num, agent_email)
+                generate_cleaned_transcript_sync(call_id, part, call_date)
                 for part in chunks
             )
 

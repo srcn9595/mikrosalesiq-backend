@@ -80,7 +80,7 @@ async def analyze(request: Request):
                 "type": "text",
                 "content": (
                     "Ben, MikroSalesIQ satış zekası sisteminin bir parçasıyım.\n"
-                    "Sercan Işık tarafından geliştirildim ve yapay zeka destekli çağrı analizi yaparak\n"
+                    "Mikro grup tarafından geliştirildim ve yapay zeka destekli çağrı analizi yaparak\n"
                     "müşteri temsilcilerine ve yöneticilere akıllı satış öngörüleri sunarım.\n"
                     "Altyapımda OpenAI, FastAPI, MongoDB, Redis, Pinecone gibi teknolojiler kullanılmaktadır."
                 )
@@ -211,76 +211,43 @@ async def analyze(request: Request):
             return {"type":"text", "content": msg}
 
         # 🔟 mongo_aggregate sonuçlarını parse et ve dök
+        all_items: list[dict] = []
+
         for step in executor_json.get("results", []):
-            if step.get("name") == "mongo_aggregate":
-                raw = step.get("output", [])
-                if not raw:
-                    await mongo.analysis_workflows.update_one(
-                        {"_id": wf_id},
-                        {"$set": {
-                            "status": "succeeded",
-                            "results": [{"name":"mongo_aggregate","output":[]}],
-                            "timestamps.completed_at": datetime.utcnow()
-                        }}
-                    )
-                    return {
-                        "type":"text",
-                        "content": "Aradığınız kriterlere uygun görüşme kaydı bulunamadı."
-                    }
+            if step.get("name") != "mongo_aggregate":
+             continue
 
-                items = []
-                for rec in raw:
-                    cid = rec.get("call_id")
-                    # agent bilgisi
-                    if rec.get("agent_email") or rec.get("agent_name"):
-                        items.append({
-                            "call_id": cid,
-                            "agent_email": rec.get("agent_email",""),
-                            "agent_name": rec.get("agent_name",""),
-                            "call_date": rec.get("call_date",""),
-                            "caller_id": rec.get("caller_id",""),
-                            "called_num": rec.get("called_num","")
-                        })
-                    # transcript
-                    elif rec.get("transcript") or rec.get("cleaned_transcript"):
-                        txt = rec.get("transcript") or rec.get("cleaned_transcript")
-                        items.append({
-                            "call_id": cid,
-                            "transcript": txt,
-                            "call_date": rec.get("call_date","")
-                        })
-                    # sadece tarih
-                    elif rec.get("call_date"):
-                        items.append({
-                            "call_id": cid,
-                            "call_date": rec.get("call_date","")
-                        })
-                    # message
-                    elif "message" in rec:
-                        items.append({
-                            "call_id": cid,
-                            "message": rec["message"]
-                        })
-                    # fallback
-                    else:
-                        other = set(rec.keys()) - {"call_id"}
-                        if not other:
-                            items.append({"call_id": cid})
-                        else:
-                            items.append({
-                                "call_id": cid,
-                                "message": "Beklenmeyen bir sonuç yapısı var."
-                            })
+            raw = step.get("output", []) or []
+            BLACKLIST = {
+                 "_id", "file_path", "raw_transcript", "downloaded_at",
+                 "transcribed_at", "cleaned_at", "call_key", "token_count"
+             }
 
-                await mongo.analysis_workflows.update_one(
-                    {"_id": wf_id},
-                    {"$set": {
-                        "status": "succeeded",
-                        "results": [{"name":"mongo_aggregate","output":items}],
-                        "timestamps.completed_at": datetime.utcnow()
-                    }}
-                )
-                return {"type":"json", "content": {"items": items}}
+            for rec in raw:
+                # İstenmeyen alanları at
+                clean = {k: v for k, v in rec.items() if k not in BLACKLIST}
+
+                # call_id garantiye al
+                if "call_id" not in clean and rec.get("call_id"):
+                    clean["call_id"] = rec["call_id"]
+
+                # mesaj varsa koru
+                if "message" in rec:
+                    clean["message"] = rec["message"]
+
+                all_items.append(clean)
+
+        # En az bir mongo_aggregate sonucu varsa kaydet + dön
+        if all_items:
+            await mongo.analysis_workflows.update_one(
+                {"_id": wf_id},
+                {"$set": {
+                     "status": "succeeded",
+                     "results": [{"name": "mongo_aggregate", "output": all_items}],
+                     "timestamps.completed_at": datetime.utcnow()
+              }}
+            )
+            return {"type": "json", "content": {"items": all_items}}
 
         # 1️⃣1️⃣ write_call_insights varsa
         for step in executor_json.get("results", []):

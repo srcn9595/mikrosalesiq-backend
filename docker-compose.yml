@@ -116,6 +116,8 @@ services:
       - OUTPUT_ROOT=${OUTPUT_ROOT}
       - HF_TOKEN=${HF_TOKEN}
       - HF_HUB_ENABLE_HF_TRANSFER=${HF_HUB_ENABLE_HF_TRANSFER}
+      - NER_MODEL=${NER_MODEL}
+      - HF_LOCAL_ONLY=${HF_LOCAL_ONLY}
     depends_on:
       - redis
     command: python transcribe_worker.py

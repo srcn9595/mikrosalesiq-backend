@@ -15,6 +15,24 @@ from mini_rag.mini_rag_sync_worker import generate_mini_rag_output
 import mongo_utils
 import queue_utils
 from clean_transcript.clean_sync_worker import clean_transcript_sync
+import re
+
+# ───────────── prev-placeholder helper’ları ─────────────
+_PH_RE = re.compile(r"{prev\.([^}]+)}")
+
+def _fill_templates(obj, ctx: dict):
+    """
+    Dict/list/string içinde geçen  {prev.foo}  şablonlarını
+    ctx["foo"] değeriyle değiştirir.
+    """
+    if isinstance(obj, dict):
+        return {k: _fill_templates(v, ctx) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_fill_templates(v, ctx) for v in obj]
+    if isinstance(obj, str):
+        return _PH_RE.sub(lambda m: str(ctx.get(m.group(1), m.group(0))), obj)
+    return obj
+
 # ───────────────────────────── LOGGING ─────────────────────────────
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("executor_api")
@@ -37,6 +55,15 @@ app = FastAPI()
 def bson_safe(obj):
     """MongoDB BSON verisini güvenli şekilde JSON'a çevirir."""
     return json.loads(json_util.dumps(obj))
+
+def _is_call_level(pipeline: list[dict]) -> bool:
+    for st in pipeline:
+        if "$unwind" in st and st["$unwind"].startswith("$calls"):
+            return True
+        for op in ("$project", "$match", "$sort"):
+            if op in st and any(k.startswith("calls.") for k in st[op]):
+                return True
+    return False
 
 @app.post("/enqueue-calls")
 async def enqueue_calls_endpoint(payload: Dict[str, Any] = Body(...)):
@@ -202,7 +229,7 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
     """
     try:
         log.info("execute_plan çağrıldı. Plan: %s", plan)
-
+        
         requested_tools = {s.get("name") for s in plan}
 
         # ───────────── get_mini_rag_summary (çoklu & senkron) ─────────────
@@ -277,19 +304,26 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
                    or "İşlenebilecek müşteri bulunamadı"}
         # ───────────────────────────────────────────────────────────────────
 
-
+        
         # ───────────── mongo_aggregate adımı zorunlu ──────────────
-        mongo_steps = [s for s in plan if s.get("name") == "mongo_aggregate"]
-        if not mongo_steps:
-            raise HTTPException(400, "execute plan’ında 'mongo_aggregate' adımı yok.")
 
-        mongo_step   = mongo_steps[0]
-        args         = mongo_step.get("arguments", {})
-        coll_name    = args.get("collection")
-        pipeline     = args.get("pipeline", [])
+        collected_results: list[dict] = []
+        context: dict = {}
+        for step in plan:
+            if step.get("name") != "mongo_aggregate":
+              continue                         # (şimdilik diğer tool’lar yok)
 
-        if not coll_name or not isinstance(pipeline, list):
-            raise HTTPException(400, f"Geçersiz mongo_aggregate argümanları: {args}")
+            # {prev.foo} şablonunu gerçek değerle doldur
+            step["arguments"] = _fill_templates(step["arguments"], context)
+
+            coll_name = step["arguments"].get("collection")
+            pipeline  = step["arguments"].get("pipeline")
+            call_level = _is_call_level(pipeline)
+
+            if not coll_name or not isinstance(pipeline, list):
+                  raise HTTPException(
+                     400, f"Geçersiz mongo_aggregate argümanları: {step['arguments']}"
+                )
 
         # Agent e-mail'de geniş regex koruması
         if any("$match" in st and "calls.agent_email" in st["$match"]
@@ -303,7 +337,7 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
             return {"message": "Girilen kriterlere uygun kayıt bulunamadı."}
 
         # 1· lookup → 2· senkron clean → 3· enqueue eksikler
-        need_lookup = [d for d in docs if not d.get("cleaned_transcript")]
+        need_lookup = [d for d in docs if d.get("call_id") and not d.get("cleaned_transcript")] if call_level else []
         if need_lookup:
             ids = [d["call_id"] for d in need_lookup]
             cursor = audio_coll.aggregate([
@@ -322,7 +356,7 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
                 d.setdefault("cleaned_transcript", extra.get("cleaned_transcript"))
                 d.setdefault("transcript",         extra.get("transcript"))
 
-        to_clean = [d for d in docs if d.get("transcript") and not d.get("cleaned_transcript")]
+        to_clean = [d for d in docs if d.get("transcript") and not d.get("cleaned_transcript")] if call_level else []
         for rec in to_clean:
             try:
                 rec["cleaned_transcript"] = clean_transcript_sync(rec["call_id"])
@@ -347,9 +381,10 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
         
         pipeline_wants_text = project_wants_text(pipeline)
 
-        missing_call_ids = [d["call_id"] for d in docs if not d.get("cleaned_transcript")]
+        missing_call_ids = [d["call_id"] for d in docs if not d.get("cleaned_transcript")] if call_level else []
 
-        if missing_call_ids and (tools_demand_text or pipeline_wants_text):
+
+        if call_level and missing_call_ids and (tools_demand_text or pipeline_wants_text):
             qinfo = queue_utils.enqueue_downloads(missing_call_ids)
 
             for d in docs:

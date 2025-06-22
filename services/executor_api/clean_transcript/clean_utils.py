@@ -9,9 +9,9 @@ from pathlib import Path
 log = logging.getLogger("clean_utils")
 
 OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL       = os.getenv("CLEAN_MODEL", "gpt-4o")
+OPENAI_MODEL       = os.getenv("CLEAN_MODEL", "gpt-4o-mini")
 OPENAI_TEMPERATURE = float(os.getenv("CLEAN_TEMP", "0.3"))
-MAX_CHUNK_TOKENS   = int(os.getenv("CLEAN_MAX_TOKENS", "8000"))
+MAX_CHUNK_TOKENS   = int(os.getenv("CLEAN_MAX_TOKENS", "12000"))
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "config" / "system_prompt.txt"
 
@@ -38,17 +38,19 @@ def chunks_by_tokens(text: str, limit: int) -> List[str]:
     return parts
 
 @backoff.on_exception(backoff.expo, (OpenAIError, TimeoutError, APIConnectionError, APITimeoutError), max_tries=4)
-def generate_cleaned_transcript_sync(call_id: str, transcript: str, customer_num: str, agent_email: str) -> str:
-    prompt_template = (
-        "◾ Agent (Temsilci) e-postası → {agent_email}\n"
-        "◾ Customer (Müşteri) numarası → {customer_num}\n\n{transcript}"
-    )
+def generate_cleaned_transcript_sync(call_id: str, transcript: str, call_date: str) -> str:
+    """
+    Bu fonksiyon, ham transkripti OpenAI'ye göndererek temizlenmiş (düzenlenmiş) halini döner.
+    Artık müşteri numarası veya e-posta içermez.
+    """
+
+    # Sistem mesajı: model davranışını yönlendirir
     system_prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
-    full_prompt = prompt_template.format(
-        agent_email=agent_email,
-        customer_num=customer_num,
-        transcript=transcript
-    )
+
+    # Kullanıcıya özel bağlamsal mesaj (isteğe bağlı)
+    context_info = f"Çağrı Kimliği: {call_id}\nÇağrı Tarihi: {call_date}"
+
+    full_prompt = f"{context_info}\n\n{transcript}"
 
     response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,

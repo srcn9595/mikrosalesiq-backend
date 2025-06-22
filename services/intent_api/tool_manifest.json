@@ -9,7 +9,7 @@
         "properties": {
           "collection": {
             "type": "string",
-            "enum": ["audio_jobs", "call_records"]
+            "enum": ["audio_jobs"]
           },
           "pipeline": {
             "type": "array",

@@ -12,7 +12,10 @@ db     = client[MONGO_DB]
 audio  = db[AUDIO_COLL]
 
 def clean_transcript_sync(call_id: str) -> str:
-    doc = audio.find_one({"calls.call_id": call_id}, {"calls.$": 1, "customer_num": 1})
+    doc = audio.find_one(
+        {"calls.call_id": call_id},
+        {"calls.$": 1, "customer_num": 1}
+    )
     if not doc or not doc.get("calls"):
         raise ValueError(f"{call_id} için veri bulunamadı.")
 
@@ -21,12 +24,11 @@ def clean_transcript_sync(call_id: str) -> str:
     if not transcript:
         raise ValueError(f"{call_id} için transcript boş.")
     
-    customer_num = doc["customer_num"]
-    agent_email  = call.get("agent_email", "Temsilci")
-
+    call_date = call.get("call_date", "Tarih bilinmiyor")
     chunks = chunks_by_tokens(transcript, 8000)
+
     cleaned = "\n\n".join(
-        generate_cleaned_transcript_sync(call_id, part, customer_num, agent_email)
+        generate_cleaned_transcript_sync(call_id, part, call_date)
         for part in chunks
     )
 
@@ -39,3 +41,4 @@ def clean_transcript_sync(call_id: str) -> str:
         }}
     )
     return cleaned
+

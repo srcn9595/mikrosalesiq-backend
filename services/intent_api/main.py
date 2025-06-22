@@ -7,8 +7,10 @@ from langfuse import Langfuse
 from dotenv import load_dotenv
 import logging
 import re
+from typing import List  
 from datetime import datetime, timedelta
 from openai.types.chat import ChatCompletionMessageToolCall
+
 ROOT_DIR   = pathlib.Path(__file__).parent
 CONFIG_DIR = ROOT_DIR / "config"
 load_dotenv(ROOT_DIR / ".env")
@@ -26,6 +28,48 @@ langfuse = Langfuse(
     host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
 )
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# ───────────────────────── call-level algısı ─────────────────────────
+def pipeline_is_call_level(pipeline: list[dict]) -> bool:
+    """
+    Pipeline’da $unwind "$calls" VARSA veya
+    herhangi bir stage 'calls.' ile başlayan alan kullanıyorsa TRUE döner.
+    """
+    for stage in pipeline:
+
+        # 1) $unwind
+        if "$unwind" in stage:
+            uw = stage["$unwind"]
+            # $unwind: "$calls"  veya  $unwind: {"path": "$calls", ...}
+            if (isinstance(uw, str)  and uw.startswith("$calls")) or \
+               (isinstance(uw, dict) and uw.get("path") == "$calls"):
+                return True
+
+        # 2) $match / $project / $sort vs.
+        for op in ("$match", "$project", "$sort"):
+            if op in stage and any(k.startswith("calls.") for k in stage[op]):
+                return True
+    return False
+
+def ensure_call_id(pipeline: list[dict]) -> list[dict]:
+    """
+    Pipeline CALL-LEVEL ise $project’a call_id ekler.
+    Customer-level sorgulara dokunmaz.
+    """
+    if not pipeline_is_call_level(pipeline):
+        return pipeline                      # müşteri seviyesinde → aynen döndür
+
+    # $project zaten varsa call_id’i ekle
+    for st in pipeline:
+        if "$project" in st:
+            st["$project"].setdefault("call_id", "$calls.call_id")
+            st["$project"].setdefault("_id", 0)
+            return pipeline
+
+    # $project yoksa en sona ekle
+    pipeline.append({"$project": {"_id": 0, "call_id": "$calls.call_id"}})
+    return pipeline
+
 
 # ───────────────────────── helpers ─────────────────────────────────────────
 def _resolve_relative_dates(text: str) -> str:
@@ -53,6 +97,34 @@ def _resolve_relative_dates(text: str) -> str:
         return real.isoformat()
     return _REL_RE.sub(_sub, text)
 
+CANON = {
+    # ───────── İçerik alanları ─────────
+    r"(özet|analiz|summary)":                "summary",
+    r"(profil|profile|müşteri profili)":     "customer_profile",
+    r"(skor|puan|score)":                    "sales_scores",
+    r"(öneri|recommendation|tavsiye)":       "recommendations",
+    r"(transkript|metin|clean text)":        "cleaned_transcript",
+    r"(süre|duration|kaç.?dk|kaç.?sn)":      "duration",
+
+    # ───────── CRM alanları ─────────
+    r"(paket|ürün|module|product)":          "product_lookup",
+    r"(stage|aşama|fırsat.?aşaması)":        "opportunity_stage",
+    r"(kaynak|lead source)":                 "lead_source",
+    r"(close date|kapanış.?tarihi)":         "close_date",
+    r"(lost reason|kaybedilme.?sebebi)":     "lost_reason",
+    r"(contact.?email|iletişim.?eposta)":    "contact_email",
+    r"(contact.?name|iletişim.?adı)":        "contact_name",
+}
+
+
+
+def extract_fields(query: str) -> List[str]:
+    found = [
+        canon
+        for pattern, canon in CANON.items()
+        if re.search(pattern, query, re.I)      # ‼️ re.escape YOK
+    ]
+    return list(dict.fromkeys(found))
 
 
 def build_messages(user_query: str) -> list[dict]:
@@ -72,10 +144,15 @@ def build_messages(user_query: str) -> list[dict]:
     sys_prompt = _resolve_relative_dates(sys_prompt)
     examples_md = _resolve_relative_dates(examples_md)
 
-    # kalan yer tutucuları
+    wanted_fields = extract_fields(user_query)
+    fields_hint   = "**User-requested fields:** " + (
+        ", ".join(wanted_fields) if wanted_fields else "(default)"
+    )
+
     sys_prompt = (
         sys_prompt
-        .replace("{{schema_registry}}", schema_json)
+        .replace("{{fields_hint}}",      fields_hint)
+        .replace("{{schema_registry}}",  schema_json)
         .replace("{{heuristics}}",       heuristics_md)
         .replace("{{prompt_examples}}",  examples_md)
         .replace("{{intents_json}}",     intents_json)
@@ -171,12 +248,12 @@ async def analyze(req: Request):
             # ② Generation span: openai.plan
             with langfuse.start_as_current_generation(
                 name="openai.plan",
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 input={"messages": build_messages(query)}
             ) as gen:
 
                 resp = client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-4o-mini",
                     tools=TOOL_MANIFEST,
                     messages=build_messages(query),
                     response_format={"type": "json_object"},
@@ -205,8 +282,14 @@ async def analyze(req: Request):
                     t = tidy(s)
                     if isinstance(t, list):
                         plan.extend(t)
-                    else:
-                        plan.append(t)
+                        continue
+
+                    if t["name"] == "mongo_aggregate":
+                        pl = t["arguments"].get("pipeline", [])
+                        t["arguments"]["pipeline"] = ensure_call_id(pl)
+
+                    plan.append(t)
+
 
                 # ③ Generation span’a sonucu kaydet
                 gen.update(output={"plan": plan})
