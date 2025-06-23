@@ -30,17 +30,40 @@ langfuse = Langfuse(
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ───────────────────────── call-level algısı ─────────────────────────
+
+# intent düzeyi haritası
+INTENT_LEVEL_MAP = {
+    "cleaned_transcript": "call",
+    "file_path": "call",
+    "duration": "call",
+    "call_date": "call",
+    "agent_email": "call",
+    "agent_name": "call",
+    "call_insights": "call",
+    "contact_email": "customer",
+    "contact_name": "customer",
+    "customer_num": "customer",
+    "opportunity_stage": "customer",
+    "product_lookup": "customer",
+    "lead_source": "customer",
+    "close_date": "customer",
+    "created_date": "customer",
+    "lost_reason": "customer",
+    "get_call_metrics":"customer"
+}
+
+def is_call_level_intent(intent: str) -> bool:
+    return INTENT_LEVEL_MAP.get(intent) == "call"
+
 def pipeline_is_call_level(pipeline: list[dict]) -> bool:
     """
     Pipeline’da $unwind "$calls" VARSA veya
     herhangi bir stage 'calls.' ile başlayan alan kullanıyorsa TRUE döner.
     """
     for stage in pipeline:
-
         # 1) $unwind
         if "$unwind" in stage:
             uw = stage["$unwind"]
-            # $unwind: "$calls"  veya  $unwind: {"path": "$calls", ...}
             if (isinstance(uw, str)  and uw.startswith("$calls")) or \
                (isinstance(uw, dict) and uw.get("path") == "$calls"):
                 return True
@@ -51,25 +74,25 @@ def pipeline_is_call_level(pipeline: list[dict]) -> bool:
                 return True
     return False
 
-def ensure_call_id(pipeline: list[dict]) -> list[dict]:
+def ensure_call_id(pipeline: list[dict], intent: str) -> list[dict]:
     """
-    Pipeline CALL-LEVEL ise $project’a call_id ekler.
-    Customer-level sorgulara dokunmaz.
+    Eğer intent call-level ise ve pipeline da öyle görünüyorsa
+    $project aşamasına call_id ekler.
     """
-    if not pipeline_is_call_level(pipeline):
-        return pipeline                      # müşteri seviyesinde → aynen döndür
+    if not is_call_level_intent(intent):
+        return pipeline
 
-    # $project zaten varsa call_id’i ekle
+    if not pipeline_is_call_level(pipeline):
+        return pipeline
+
     for st in pipeline:
         if "$project" in st:
             st["$project"].setdefault("call_id", "$calls.call_id")
             st["$project"].setdefault("_id", 0)
             return pipeline
 
-    # $project yoksa en sona ekle
     pipeline.append({"$project": {"_id": 0, "call_id": "$calls.call_id"}})
     return pipeline
-
 
 # ───────────────────────── helpers ─────────────────────────────────────────
 def _resolve_relative_dates(text: str) -> str:
@@ -286,7 +309,8 @@ async def analyze(req: Request):
 
                     if t["name"] == "mongo_aggregate":
                         pl = t["arguments"].get("pipeline", [])
-                        t["arguments"]["pipeline"] = ensure_call_id(pl)
+                        intent = t.get("intent", "")
+                        t["arguments"]["pipeline"] = ensure_call_id(pl, intent)
 
                     plan.append(t)
 

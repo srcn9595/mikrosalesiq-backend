@@ -262,6 +262,22 @@ async def analyze(request: Request):
                     }}
                 )
                 return {"type":"json", "content": out}
+            
+        # 1️⃣2️⃣ get_call_metrics varsa
+        for step in executor_json.get("results", []):
+            if step.get("name") == "get_call_metrics":
+                out = step.get("output", {})
+                await mongo.analysis_workflows.update_one(
+                    {"_id": wf_id},
+                    {"$set": {
+                        "status": "succeeded",
+                        "results": [{"name": "get_call_metrics", "output": out}],
+                        "timestamps.completed_at": datetime.utcnow()
+                    }}
+                )
+                return {"type": "json", "content": out}
+
+
 
         # 🔺 Hiçbiri çalışmadıysa hata
         await mongo.analysis_workflows.update_one(

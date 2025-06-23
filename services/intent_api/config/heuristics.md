@@ -67,6 +67,7 @@
 | “süre”, “kaç saniye”, “kaç dk” | duration | Toplam konuşma süresi (audio_jobs.calls.duration). |
 | “agent puanı”, “temsilci skoru” | `agent_score` | Analytics servisinden temsilci performans puanı. |
 | “özet”, “analiz”, “değerlendirme”, “öneri” | `call_insights` | Satış-içgörü (özet + profil + puanlama + öneriler). |
+| **“kaç”, “toplam”, “ortalama”, “en uzun”, “kaç farklı”**| **`get_call_metrics`**| Toplam/ortalama süre, çağrı sayısı, farklı kişi sayısı vb. özet istatistikleri döner.|
 | “kim”, “kimle”, “kiminle” (+agent) | `contact_num` | Agent merkezli sorguda müşteri numarası (Inbound → `caller_id`, Outbound → `called_num`). |
 | “paket”, “ürün”, “product” | `product_lookup` | Satın alınan paket / modül → `audio_jobs.product_lookup`. |
 | “kapanış tarihi”, “close date” | `close_date` | `audio_jobs.close_date`. |
@@ -80,20 +81,51 @@
 
 ---
 
-## 2.1 · Heuristik Kural: `$project` İçine Mutlaka `call_id` Ekle
+## 2.1 · Heuristik Kural: `$project` İçine `call_id` yalnızca **call-level** sorgular için eklenmelidir
 
-- **Kural:** Hangi alana göre filtreleme yaparsanız yapın (çağrı ID’si, telefon numarası, tarih vb.), dönen belgelerde mutlaka `call_id` olsun.  
-- **Nasıl Uygulanır?**  
-  1. Kullanıcı “call_id” verdiğinde→ pipeline’da önce `$match: {call_id: …}`  
-     Sonrasında mutlaka `$project: { "_id": 0, "call_id": 1, <istenen diğer alanlar> }`.  
-  2. Kullanıcı “telefon numarası” veya “tarih” gibi başka bir filtre kullanırsa→ önce `$match` aşamasını ona göre kurun,  
-     **sonrasında her hâlükârda** en azından `{ "_id": 0, "call_id": 1 }` içeren bir `$project` aşaması ekleyin.  
+- **Kural:**  
+  - Eğer intent `call_insights`, `cleaned_transcript`, `file_path`, `duration`, `call_date`, `agent_name`, `agent_email` gibi **call-level** alanlardaysa,  
+    `$project` aşamasına mutlaka `call_id` eklenmelidir.  
+  - Eğer intent `opportunity_stage`, `lead_source`, `contact_email`, `contact_name`, `product_lookup`, `close_date`, `lost_reason`, `created_date` gibi **customer-level** alanlardaysa,  
+    `call_id` **gereksizdir** ve `$project` aşamasına **eklenmemelidir**.
+
 - **Neden?**  
-  - `execute_plan` fonksiyonunuz, her zaman `docs[i]["call_id"]` üzerinden ilerliyor. Eğer pipeline `$project` aşamasında `call_id` yoksa, `KeyError: 'call_id'` hatası alıyorsunuz.  
-  - Bu kural sayesinde tüm planlarda “call_id” birinci öncelikli alandır ve downstream kodunuz eksiksiz çalışır.
+  - `call_id`, sadece `audio_jobs.calls[]` içindeki **çağrı seviyesinde** geçerli bir alandır.  
+  - `audio_jobs` düzeyindeki müşteri seviyesinde (ör. `opportunity_stage`, `lead_source` gibi) `call_id` teknik olarak mevcut değildir.  
+    Eklenirse `null` değer dönebilir veya sistem hatası oluşabilir.
 
-  • call_id alanı **yalnızca call-level** sonuçlar için zorunludur.  
-  • customer-level alanlarda (contact_email, opportunity_stage, sales_scores …) call_id beklenmez.
+- **Uygulama Notu:**  
+  - Model, her `tool_call` için önce intent’in **call-level mi customer-level mi** olduğunu belirlemeli  
+    ve `$project` aşamasını buna göre oluşturmalıdır.  
+  - `execute_plan` fonksiyonu da yalnızca **call-level** çıktılarda `call_id` kontrolü yapmalıdır.  
+    Customer-level çıktılar için `call_id` kontrolü yapılmamalıdır.
+
+---
+
+## 2.1.1 · Intent Seviyeleri
+
+Aşağıdaki tablo, her intent'in hangi seviyede (`call-level` mi `customer-level` mi) değerlendirilmesi gerektiğini gösterir.
+
+| Intent Adı            | Seviye        | Açıklama |
+|------------------------|----------------|----------|
+| `cleaned_transcript`   | call-level     | Belirli bir çağrıya ait transkript |
+| `file_path`            | call-level     | Ses dosyasının konumu |
+| `duration`             | call-level     | Çağrı süresi |
+| `call_date`            | call-level     | Çağrının yapıldığı tarih |
+| `agent_email`          | call-level     | Görüşmeye katılan temsilcinin e-posta adresi |
+| `agent_name`           | call-level     | Temsilcinin adı |
+| `call_insights`        | call-level     | Satış içgörüleri – yalnızca belirli çağrılarda çalışır |
+| `contact_email`        | customer-level | Müşterinin iletişim e-postası |
+| `contact_name`         | customer-level | Müşteri adı |
+| `customer_num`         | customer-level | Müşteri telefon numarası (05... ile başlayan) |
+| `opportunity_stage`    | customer-level | Fırsatın hangi aşamada olduğu |
+| `product_lookup`       | customer-level | Satın alınan ürün/paket listesi |
+| `lead_source`          | customer-level | Lead kaynağı |
+| `close_date`           | customer-level | Kapanış tarihi |
+| `created_date`         | customer-level | Kaydın oluşturulma tarihi |
+| `lost_reason`          | customer-level | Fırsat kaybı nedeni |
+
+> Model, intent’e göre `$project` aşamasında `call_id` ekleyip eklemeyeceğini bu tabloya göre belirlemelidir.
 
 
 ## 2.2 · `call_insights` İçin Ekstra Heuristikler

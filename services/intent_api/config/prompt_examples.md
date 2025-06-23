@@ -220,7 +220,8 @@
       collection: audio_jobs
       pipeline:
         - $match: { customer_num: "05326375292" }
-        - $project: { _id: 0, call_id: "$calls.call_id", opportunity_stage: 1 }
+        - $project: { _id: 0, opportunity_stage: 1 }
+
 
 # 17 — PRODUCT LOOKUP
 - user: "Kartal Market hangi paketleri almış?"
@@ -321,4 +322,17 @@
               contact_email: 1
               contact_name: 1
               close_date: 1
+              
+# 23 — CALL METRICS (toplam çağrı adedi)
+- user: "05011345074 müşterisiyle toplam kaç çağrı yapılmış?"
+  tool_call:
+    name: mongo_aggregate
+    intent: get_call_metrics
+    arguments:
+      collection: audio_jobs
+      pipeline:
+        - $unwind: "$calls"
+        - $match:  { customer_num: "05011345074" }
+        - $group:  { _id: null, total_calls: { $sum: 1 } }
+        - $project:{ _id: 0, total_calls: 1 }
 

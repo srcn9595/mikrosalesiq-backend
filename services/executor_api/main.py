@@ -16,6 +16,8 @@ import mongo_utils
 import queue_utils
 from clean_transcript.clean_sync_worker import clean_transcript_sync
 import re
+from datetime import datetime
+from motor.motor_asyncio import AsyncIOMotorClient
 
 # ───────────── prev-placeholder helper’ları ─────────────
 _PH_RE = re.compile(r"{prev\.([^}]+)}")
@@ -46,6 +48,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 client = pymongo.MongoClient(MONGO_URI)
 db     = client[MONGO_DB]
 rds    = redis.from_url(REDIS_URL)
+mongo     = AsyncIOMotorClient(MONGO_URI)[MONGO_DB]
 
 # “audio_jobs” koleksiyonunu hem status hem transcript alanlarında kullanıyoruz
 audio_coll = db["audio_jobs"]
@@ -232,6 +235,58 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
         
         requested_tools = {s.get("name") for s in plan}
 
+        # ───────────── get_call_metrics (toplam/ortalama/max süre) ─────────────
+        metrics_steps = [s for s in plan if s.get("name") == "get_call_metrics"]
+        if metrics_steps:
+            results = []
+
+            # ❶ Müşteri numarası veya müşteri numaraları (liste) normalize et
+            customer_set = set()
+            for st in metrics_steps:
+                arg = st.get("arguments", {})
+                if "customer_num" in arg:
+                    customer_set.add(arg["customer_num"])
+                if "customer_nums" in arg:
+                    customer_set.update(arg["customer_nums"])
+
+            # ❷ Her müşteri numarası için metrikleri hesapla
+            for cnum in customer_set:
+                # MongoDB aggregation pipeline'ı ile metrikleri hesapla
+                pipeline = [
+                     {"$unwind": "$calls"},
+                     {"$match": {"customer_num": cnum}},
+                     {"$group": {
+                         "_id": "$customer_num",
+                         "total_calls": {"$sum": 1},
+                         "avg_duration": {"$avg": "$calls.duration"},
+                         "max_duration": {"$max": "$calls.duration"},
+                         "unique_agents": {"$addToSet": "$calls.agent_email"}
+                     }},
+                     {"$project": {
+                      "_id": 0,
+                      "customer_num": "$_id",
+                      "total_calls": 1,
+                      "avg_duration": 1,
+                      "max_duration": 1,
+                      "unique_agents_count": {"$size": "$unique_agents"}
+                    }}
+                ]
+
+                # MongoDB'de pipeline'ı çalıştır
+                metrics = list(db["audio_jobs"].aggregate(pipeline))
+                if metrics:
+                    results.append({"name": "get_call_metrics", "output": metrics[0]})
+                else:
+                    results.append({
+                         "name": "get_call_metrics",
+                         "output": {"message": f"{cnum} için metrik verisi bulunamadı."}
+                    })
+
+            if results:
+                return {"results": results}
+
+
+
         # ───────────── get_mini_rag_summary (çoklu & senkron) ─────────────
         summary_steps = [s for s in plan if s.get("name") == "get_mini_rag_summary"]
         if summary_steps:
@@ -337,7 +392,7 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
             return {"message": "Girilen kriterlere uygun kayıt bulunamadı."}
 
         # 1· lookup → 2· senkron clean → 3· enqueue eksikler
-        need_lookup = [d for d in docs if d.get("call_id") and not d.get("cleaned_transcript")] if call_level else []
+        need_lookup = [d for d in docs if "call_id" in d and not d.get("cleaned_transcript")] if call_level else []
         if need_lookup:
             ids = [d["call_id"] for d in need_lookup]
             cursor = audio_coll.aggregate([
@@ -381,7 +436,8 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
         
         pipeline_wants_text = project_wants_text(pipeline)
 
-        missing_call_ids = [d["call_id"] for d in docs if not d.get("cleaned_transcript")] if call_level else []
+        missing_call_ids = [d["call_id"] for d in docs if "call_id" in d and not d.get("cleaned_transcript")] if call_level else []
+
 
 
         if call_level and missing_call_ids and (tools_demand_text or pipeline_wants_text):

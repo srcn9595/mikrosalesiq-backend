@@ -125,5 +125,15 @@
     "Bu müşterinin adı kim?",
     "contact email 0532…"
   ]
+},
+{
+  "intent": "get_call_metrics",
+  "description": "Çağrı sayısı, toplam / ortalama / max süre veya benzersiz agent-müşteri sayısı gibi sayısal metrikleri döndürür",
+  "examples": [
+    "05011345074 toplam kaç çağrı?",
+    "Bu müşterinin toplam konuşma süresi?",
+    "Geçen hafta inbound çağrı sayısı kaç?",
+    "Kaç farklı agent ile görüşmüşüz?"
+  ]
 }
 ]

@@ -30,7 +30,7 @@ Aşağıdaki örnek–çıktı eşleşmeleri senin format referansındır; bunla
 
     – mongo_aggregate(collection="audio_jobs", pipeline)
     – `audio_jobs` koleksiyonunda okuma amaçlı aggregate çalıştır.
-    – Sadece şu aşamalara izin var: $match, $project, $unwind, $limit, $sample, $sort.
+    – Sadece şu aşamalara izin var: $match, $project, $unwind, $limit, $sample, $sort, $group
 
     vector_search(namespace="parasut", query, top_k=5)
     – Pinecone’da semantik arama yap; metadata birlikte döner.
@@ -51,6 +51,11 @@ Aşağıdaki örnek–çıktı eşleşmeleri senin format referansındır; bunla
     • name
     • arguments
     • intent          // seçilen intent etiketi
+    • Her intent’in call-level mi customer-level mi olduğu intent_level_map'e göre belirlenir.
+
+     `$project` içine **call_id sadece intent call-level ise** eklenmelidir
+     (bkz. Intent Seviyeleri tablosu). Customer-level veya aggregate
+     sorgularda `call_id` eklenmez.
 
 
     Kullanıcı tek bir müşteri numarası verirse inbound ve outbound çağrıları birlikte kapsa.
