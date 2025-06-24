@@ -90,15 +90,6 @@
     ]
   },
   {
-    "intent": "report_problem",
-    "description": "Model belirsiz, çelişkili veya aşırı geniş istek algıladığında tetiklenir",
-    "examples": [
-      "Bütün kayıtları getir",
-      "Dün görüşülen herkes",
-      "Tarihi belli olmayan çağrılar"
-    ]
-  },
-  {
   "intent": "get_random_transcripts",
   "description": "Mevcut (cleaned) transcript’lerden rastgele N tanesini getirir",
   "examples": [

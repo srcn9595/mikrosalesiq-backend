@@ -5,6 +5,28 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 import logging
 import pathlib, json
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
+from mongo_chat_utils import create_chat_session_if_needed, insert_message
+
+KEYCLOAK_PUBLIC_KEY = os.getenv("KEYCLOAK_PUBLIC_KEY")
+KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER") 
+
+def verify_token(auth_header: str) -> dict:
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Yetkilendirme başarısız.")
+    token = auth_header[7:]
+    try:
+        payload = jwt.decode(
+            token,
+            KEYCLOAK_PUBLIC_KEY,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+            issuer=KEYCLOAK_ISSUER
+        )
+        return payload
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Geçersiz token: {e}")
 
 def ensure_path(url: str, suffix: str) -> str:
     parts = up.urlparse(url)
@@ -38,10 +60,24 @@ with open(CONFIG_DIR / "allowed_tools.json", encoding="utf-8") as f:
 
 @app.post("/api/analyze")
 async def analyze(request: Request):
+    auth = request.headers.get("Authorization")
+    if not auth:
+        raise HTTPException(status_code=401, detail="Yetkisiz erişim.")
+    user_info = verify_token(auth)
     payload = await request.json()
     query = payload.get("query", "")
     if not isinstance(query, str) or not query.strip():
         raise HTTPException(400, "Geçersiz query parametresi.")
+    
+    # 0️⃣ Yeni session başlat ve ilk mesajı kaydet
+    user_id = user_info.get("sub") or "unknown"
+    username = user_info.get("preferred_username", "")
+    email = user_info.get("email", "")
+    session_id = payload.get("session_id")
+
+    session_id = create_chat_session_if_needed(user_id, session_id)
+
+    insert_message(session_id, "user", {"type":"text", "content": query},user_id=user_id,username=username,email=email)
 
     # 1️⃣ Workflow kaydı oluştur
     workflow = {
@@ -76,6 +112,10 @@ async def analyze(request: Request):
                     "timestamps.completed_at": datetime.utcnow()
                 }}
             )
+            insert_message(session_id, "bot", {"type":"text","content":"Ben, MikroSalesIQ satış zekası sisteminin bir parçasıyım.\n"
+                    "Mikro grup tarafından geliştirildim ve yapay zeka destekli çağrı analizi yaparak\n"
+                    "müşteri temsilcilerine ve yöneticilere akıllı satış öngörüleri sunarım.\n"
+                    "Altyapımda OpenAI, FastAPI, MongoDB, Redis, Pinecone gibi teknolojiler kullanılmaktadır."})
             return {
                 "type": "text",
                 "content": (
@@ -83,7 +123,8 @@ async def analyze(request: Request):
                     "Mikro grup tarafından geliştirildim ve yapay zeka destekli çağrı analizi yaparak\n"
                     "müşteri temsilcilerine ve yöneticilere akıllı satış öngörüleri sunarım.\n"
                     "Altyapımda OpenAI, FastAPI, MongoDB, Redis, Pinecone gibi teknolojiler kullanılmaktadır."
-                )
+                ),
+                "session_id": session_id
             }
 
         # 4️⃣ Desteklenmeyen plan → fail
@@ -97,7 +138,8 @@ async def analyze(request: Request):
                     "timestamps.completed_at": datetime.utcnow()
                 }}
             )
-            return {"type": "text", "content": err}
+            insert_message(session_id, "bot", {"type": "text", "content": err})
+            return {"type": "text", "content": err,"session_id": session_id}
 
         # 5️⃣ Executor’a gönder ve executing yap
         await mongo.analysis_workflows.update_one(
@@ -120,9 +162,11 @@ async def analyze(request: Request):
                     "timestamps.completed_at": datetime.utcnow()
                 }}
             )
+            insert_message(session_id, "bot", {"type": "text", "content": "İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin."})
             return {
                 "type": "text",
-                "content": "İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin."
+                "content": "İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin.",
+                "session_id": session_id
             }
 
         # 6️⃣ Executor yanıtını al, NoneType’e karşı koru
@@ -146,7 +190,8 @@ async def analyze(request: Request):
                         "timestamps.completed_at": datetime.utcnow()
                     }}
                 )
-                return {"type": "text", "content": msg}
+                insert_message(session_id, "bot", {"type": "text", "content": msg})
+                return {"type": "text", "content": msg, "session_id": session_id}
 
             # 7-b) Bir veya birden çok summary döndü
             summaries = [
@@ -182,7 +227,8 @@ async def analyze(request: Request):
                 }
                 for o in summaries
             ]
-            return {"type": "json", "content": {"items": items}}
+            insert_message(session_id, "bot", {"type": "json", "content": {"items": items}})
+            return {"type": "json", "content": {"items": items}, "session_id": session_id}
 
         # 8️⃣ enqueue_mini_rag adımıysa direkt mesaj dön
         if any(s["name"] == "enqueue_mini_rag" for s in plan):
@@ -195,7 +241,8 @@ async def analyze(request: Request):
                     "timestamps.completed_at": datetime.utcnow()
                 }}
             )
-            return {"type":"text", "content": message}
+            insert_message(session_id, "bot", {"type": "text", "content": message})
+            return {"type":"text", "content": message,session_id: session_id}
 
         # 9️⃣ Genel executor “message” varsa
         if "message" in executor_json:
@@ -208,7 +255,8 @@ async def analyze(request: Request):
                     "timestamps.completed_at": datetime.utcnow()
                 }}
             )
-            return {"type":"text", "content": msg}
+            insert_message(session_id, "bot", {"type": "text", "content": msg})
+            return {"type":"text", "content": msg, "session_id": session_id}
 
         # 🔟 mongo_aggregate sonuçlarını parse et ve dök
         all_items: list[dict] = []
@@ -247,7 +295,8 @@ async def analyze(request: Request):
                      "timestamps.completed_at": datetime.utcnow()
               }}
             )
-            return {"type": "json", "content": {"items": all_items}}
+            insert_message(session_id, "bot", {"type": "json", "content": {"items": all_items}})
+            return {"type": "json", "content": {"items": all_items}, "session_id": session_id}
 
         # 1️⃣1️⃣ write_call_insights varsa
         for step in executor_json.get("results", []):
@@ -261,7 +310,8 @@ async def analyze(request: Request):
                         "timestamps.completed_at": datetime.utcnow()
                     }}
                 )
-                return {"type":"json", "content": out}
+                insert_message(session_id, "bot", {"type": "json", "content": out})
+                return {"type":"json", "content": out, "session_id": session_id}
             
         # 1️⃣2️⃣ get_call_metrics varsa
         for step in executor_json.get("results", []):
@@ -275,7 +325,8 @@ async def analyze(request: Request):
                         "timestamps.completed_at": datetime.utcnow()
                     }}
                 )
-                return {"type": "json", "content": out}
+                insert_message(session_id, "bot", {"type": "json", "content": out})
+                return {"type": "json", "content": out, "session_id": session_id}
 
 
 
@@ -288,7 +339,9 @@ async def analyze(request: Request):
                 "timestamps.completed_at": datetime.utcnow()
             }}
         )
+        insert_message(session_id, "bot", {"type": "text", "content": "İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin."})
         return {
             "type":"text",
-            "content":"İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin."
+            "content":"İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin.",
+            "session_id": session_id
         }

@@ -212,7 +212,6 @@ Kullanıcı aynı cümlede birden fazla istek belirtirse:
 ## 3 · Problem Tespiti
 - Çözümlenemeyen belirsiz tarih → `problem_reason = "Belirsiz tarih ifadesi"`  
 - Eksik ya da çelişkili filtre  → uygun açıklama  
-- Çok genel istek (örn. “bütün kayıtlar”) → `problem: true`
 
 ---
 
