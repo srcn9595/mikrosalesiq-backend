@@ -6,27 +6,9 @@ from datetime import datetime
 import logging
 import pathlib, json
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
-from mongo_chat_utils import create_chat_session_if_needed, insert_message
 
-KEYCLOAK_PUBLIC_KEY = os.getenv("KEYCLOAK_PUBLIC_KEY")
-KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER") 
-
-def verify_token(auth_header: str) -> dict:
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Yetkilendirme başarısız.")
-    token = auth_header[7:]
-    try:
-        payload = jwt.decode(
-            token,
-            KEYCLOAK_PUBLIC_KEY,
-            algorithms=["RS256"],
-            options={"verify_aud": False},
-            issuer=KEYCLOAK_ISSUER
-        )
-        return payload
-    except JWTError as e:
-        raise HTTPException(status_code=401, detail=f"Geçersiz token: {e}")
+from shared_lib.mongo_chat_utils import insert_message, create_chat_session_if_needed
+from shared_lib.jwt_utils import verify_token
 
 def ensure_path(url: str, suffix: str) -> str:
     parts = up.urlparse(url)

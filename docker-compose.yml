@@ -25,40 +25,45 @@ services:
       - LANGFUSE_HOST=${LANGFUSE_HOST}
 
 
-  # 4) transcript_api servisi
-  transcript_api:
+  # 4) chat_api servisi
+  chat_api:
     build:
-      context: ./services/transcript_api
+      context: .
+      dockerfile: services/chat_api/Dockerfile
     restart: always
     ports:
       - "8002:8000"
     env_file:
       - ./.env
     environment:
+      - PYTHONPATH=/app:/app/shared_lib
       - MONGO_URI=${MONGO_URI}
       - MONGO_DB=${MONGO_DB}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_HOST}
+      
 
   # 5) gateway_api servisi
   gateway_api:
     build:
-      context: ./services/gateway_api
+      context: .
+      dockerfile: services/gateway_api/Dockerfile
     restart: always
     ports:
       - "8000:8000"
     env_file:
       - ./.env
     environment:
+      - PYTHONPATH=/app:/app/shared_lib
       - INTENT_API_URL=${INTENT_API_URL}
-      - TRANSCRIPT_API_URL=${TRANSCRIPT_API_URL}
+      - CHAT_API_URL=${CHAT_API_URL}
       - EXECUTOR_API_URL=${EXECUTOR_API_URL}
       - MONGO_URI=${MONGO_URI}
       - MONGO_DB=${MONGO_DB}
     depends_on:
       - intent_api
-      - transcript_api
+      - chat_api
       - executor_api
 
   # 6) executor_api (FastAPI) servisi

@@ -1,10 +1,9 @@
 FROM mikrosalesiq-base
 
 WORKDIR /app
-COPY . /app
+COPY ./services/gateway_api /app
+COPY ./shared_lib /app/shared_lib
 
+ENV PYTHONPATH=/app:/app/shared_lib
 
-# ENV PATH /opt/conda/envs/deep_sercan/bin:$PATH
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
-
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

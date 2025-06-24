@@ -209,6 +209,24 @@ Kullanıcı aynı cümlede birden fazla istek belirtirse:
 
 ---
 
+## 2.5 · Karşılaştırmalı Sıralama (en çok / en az)
+
+Kullanıcı aynı sorguda **“en çok”**, **“en az”**, **“maksimum”**, **“minimum”**, **“fazla”**, **“az”**, **“yüksek”**, **“düşük”** gibi karşılaştırmalı ifadeler belirtmişse:
+
+1. **Sayısal bir alanın sıralanması gerekiyorsa** (ör. `won_count`, `call_count`, `duration`)  
+2. `$sort` aşamasındaki yön şu şekilde belirlenmelidir:
+
+   | İfade grubu                                            | `$sort` yönü (`order`) |
+   |--------------------------------------------------------|-------------------------|
+   | “en çok”, “maksimum”, “fazla”, “en fazla”, “yüksek”    | `{ <alan>: -1 }`        |
+   | “en az”, “minimum”, “en düşük”, “az”, “daha az”        | `{ <alan>: 1 }`         |
+
+3. Kullanıcı cümlesinde hem **“en çok”** hem de **“en az”** gibi **çelişkili** ifadeler varsa:  
+   ```json
+   [{"name":"report_problem","arguments":{"reason":"Çelişkili sıralama ifadesi"}}]
+
+---
+
 ## 3 · Problem Tespiti
 - Çözümlenemeyen belirsiz tarih → `problem_reason = "Belirsiz tarih ifadesi"`  
 - Eksik ya da çelişkili filtre  → uygun açıklama  
@@ -230,3 +248,64 @@ Eğer kullanıcı tek bir agent_email yerine geniş bir alan sorguluyorsa (örne
 - $match agent_email: { $regex: "@parasut.com$" } gibi sorgulara izin verme.
 - Alternatif olarak maksimum `limit: 50` kullan.
 - Gerekirse plan = [{"name": "report_problem", "arguments": {"reason": "Çok geniş e-posta filtresi"}}] döndür.
+
+## 2.6 · Kazanma Oranı (Won Rate) Hesaplama Kuralları
+
+Bazı sorgular, **konuşma sayısı ve kazanma oranına göre en başarılı temsilciyi (opportunity_owner_email)** tespit etmek isteyebilir. Bu durumlarda aşağıdaki kurallar geçerlidir:
+
+- **Intent**: `get_opportunity_owner_stats`
+- **Alanlar**:
+  - `total_calls`: Belirtilen tarihler arasında yapılan tüm çağrı sayısı.
+  - `won_count`: Bu çağrılar arasında "Closed Won" aşamasına ulaşan fırsat sayısı.
+  - `won_rate`: `won_count / total_calls` oranı.
+
+### Kullanım Senaryoları
+
+Kullanıcının sorgusunda aşağıdaki ifadeler geçiyorsa:
+
+| İfade Türü                                | Açıklama                    |
+|-------------------------------------------|-----------------------------|
+| “en başarılı temsilci”, “kazanma oranı”   | `won_rate` hesaplanmalı    |
+| “konuşma sayısı”, “görüşme adedi”         | `total_calls` dahil edilmeli |
+| “en çok kazanan”, “en çok won alan”       | `won_count` ön planda olmalı |
+
+### Kullanılacak Pipeline Aşamaları
+
+```json
+[
+  { "$unwind": "$calls" },
+  { "$match": { "calls.call_date": { "$gte": "...", "$lte": "..." } } },
+  {
+    "$group": {
+      "_id": "$opportunity_owner_email",
+      "total_calls": { "$sum": 1 },
+      "won_count": {
+        "$sum": {
+          "$cond": [{ "$eq": ["$opportunity_stage", "Closed Won"] }, 1, 0]
+        }
+      }
+    }
+  },
+  {
+    "$addFields": {
+      "won_rate": {
+        "$cond": [
+          { "$eq": ["$total_calls", 0] },
+          0,
+          { "$divide": ["$won_count", "$total_calls"] }
+        ]
+      }
+    }
+  },
+  { "$sort": { "won_rate": -1 } },
+  { "$limit": 1 },
+  {
+    "$project": {
+      "_id": 0,
+      "owner_email": "$_id",
+      "total_calls": 1,
+      "won_count": 1,
+      "won_rate": 1
+    }
+  }
+]

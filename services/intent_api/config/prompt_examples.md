@@ -336,3 +336,204 @@
         - $group:  { _id: null, total_calls: { $sum: 1 } }
         - $project:{ _id: 0, total_calls: 1 }
 
+# 24 — EN ÇOK LEAD LOST NEDENİ (belirli bir günde)
+- user: "12 haziran 2025 de en çok hangi lead lost almış?"
+  tool_call:
+    name: mongo_aggregate  
+    intent: get_lost_reason_count  
+    arguments:  
+      collection: audio_jobs  
+      pipeline:
+        - $match: { "calls.call_date": { $gte: "2025-06-12", $lte: "2025-06-12" } }
+        - $unwind: "$calls"
+        - $match:  
+            $or:  
+              - { "lost_reason": { $exists: true } }  
+              - { "lost_reason_detail": { $exists: true } }
+        - $group:  
+            _id:  
+              reason: { $ifNull: [ "$lost_reason", "$lost_reason_detail" ] }  
+            count: { $sum: 1 }
+        - $sort: { count: -1 }
+        - $limit: 1
+        - $project:  
+            _id: 0  
+            lost_reason: "$_id.reason"  
+            count: 1
+
+# 25 — GÖRÜŞÜLEN TEMSİLCİ SAYISI (kaç farklı kişiyle konuşmuş)
+- user: "Bu müşteri kaç farklı temsilciyle görüşmüş?"
+  tool_call:
+    name: mongo_aggregate  
+    intent: get_call_metrics  
+    arguments:  
+      collection: audio_jobs  
+      pipeline:
+        - $unwind: "$calls"
+        - $match: { customer_num: "05000000000" }
+        - $group:
+            _id: "$customer_num"
+            unique_agents: { $addToSet: "$calls.agent_email" }
+        - $project:
+            _id: 0
+            customer_num: "$_id"
+            unique_agents_count: { $size: "$unique_agents" }
+
+# 26 — EN UZUN GÖRÜŞMEYİ YAPAN MÜŞTERİ (belirli bir günde)
+- user: "12 Haziran 2025’de en uzun görüşmeyi kim yapmış?"
+  tool_call:
+    name: mongo_aggregate  
+    intent: get_call_metrics  
+    arguments:  
+      collection: audio_jobs  
+      pipeline:
+        - $unwind: "$calls"
+        - $match: { "calls.call_date": { $gte: "2025-06-12", $lte: "2025-06-12" } }
+        - $sort: { "calls.duration": -1 }
+        - $limit: 1
+        - $project:
+            _id: 0
+            customer_num: 1
+            agent_email: "$calls.agent_email"
+            duration: "$calls.duration"
+
+# 27 — EN ÇOK ÇAĞRI YAPAN MÜŞTERİ (belirli tarihte)
+- user: "15 Haziran 2025’de en çok çağrı yapan müşteri kim?"
+  tool_call:
+    name: mongo_aggregate  
+    intent: get_call_metrics  
+    arguments:  
+      collection: audio_jobs  
+      pipeline:
+        - $unwind: "$calls"
+        - $match: { "calls.call_date": { $gte: "2025-06-15", $lte: "2025-06-15" } }
+        - $group:
+            _id: "$customer_num"
+            total_calls: { $sum: 1 }
+        - $sort: { total_calls: -1 }
+        - $limit: 1
+        - $project:
+            _id: 0
+            customer_num: "$_id"
+            total_calls: 1
+
+# 28 — ORTALAMA GÖRÜŞME SÜRESİ EN YÜKSEK MÜŞTERİ (belirli tarihte)
+- user: "12 Haziran 2025’de ortalama görüşme süresi en yüksek müşteri kim?"
+  tool_call:
+    name: mongo_aggregate  
+    intent: get_call_metrics  
+    arguments:  
+      collection: audio_jobs  
+      pipeline:
+        - $unwind: "$calls"
+        - $match: { "calls.call_date": { $gte: "2025-06-12", $lte: "2025-06-12" } }
+        - $group:
+            _id: "$customer_num"
+            avg_duration: { $avg: "$calls.duration" }
+        - $sort: { avg_duration: -1 }
+        - $limit: 1
+        - $project:
+            _id: 0
+            customer_num: "$_id"
+            avg_duration: 1
+
+# 29 — FARKLI GÜNLERDE GÖRÜŞME YAPMIŞ MÜŞTERİ SAYISI
+- user: "Kaç farklı gün görüşme yapılmış?"
+  tool_call:
+    name: mongo_aggregate  
+    intent: get_call_metrics  
+    arguments:  
+      collection: audio_jobs  
+      pipeline:
+        - $unwind: "$calls"
+        - $group:
+            _id: "$calls.call_date"
+        - $count: "unique_days"
+
+# 30 — EN ÇOK WON YAPAN OWNER (belirli günde)
+- user: "12 haziran 2025 de en won alan opportunity owner email kime ait ve ne kadar?"
+  tool_call:
+    name: mongo_aggregate
+    intent: get_opportunity_owner_stats
+    arguments:
+      collection: audio_jobs
+      pipeline:
+        - $unwind: "$calls"
+        - $match:
+            calls.call_date:
+              $gte: "2025-06-12"
+              $lte: "2025-06-12"
+            opportunity_stage: "Closed Won"
+        - $group:
+            _id: "$opportunity_owner_email"
+            total_amount: { $sum: "$amount" }
+            won_count: { $sum: 1 }
+        - $sort:
+            total_amount: -1
+        - $limit: 1
+        - $project:
+            _id: 0
+            owner_email: "$_id"
+            total_amount: 1
+            won_count: 1
+
+  # 31 — EN YÜKSEK WON ORANINA SAHIP OWNER(belirli aralıkta)
+- user: "1 Ocak 2024 ile 15 Haziran 2025 arasında konuşma sayısı ve kazanma oranı olarak en yüksek performanslı opportunity e-posta sahibi kimdir?"
+  tool_call:
+    name: mongo_aggregate
+    intent: get_opportunity_owner_stats
+    arguments:
+      collection: audio_jobs
+      pipeline:
+        - $unwind: "$calls"
+        - $match:
+            calls.call_date:
+              $gte: "2024-01-01"
+              $lte: "2025-06-15"
+        - $group:
+            _id: "$opportunity_owner_email"
+            total_calls: { $sum: 1 }
+            won_count:
+              $sum:
+                $cond: [{ $eq: ["$opportunity_stage", "Closed Won"] }, 1, 0]
+        - $addFields:
+            won_rate:
+              $cond:
+                - { $eq: ["$total_calls", 0] }
+                - 0
+                - { $divide: ["$won_count", "$total_calls"] }
+        - $sort:
+            won_rate: -1
+        - $limit: 1
+        - $project:
+            _id: 0
+            owner_email: "$_id"
+            total_calls: 1
+            won_count: 1
+            won_rate: 1
+
+  # 32 — BUGÜN EN ÇOK KAZANAN OPPORTUNITY OWNER
+- user: "bugün en çok kazanan opportunity owner kim ve kaç tane kazanmış?"
+  tool_call:
+    name: mongo_aggregate
+    intent: get_opportunity_owner_stats
+    arguments:
+      collection: audio_jobs
+      pipeline:
+        - $unwind: "$calls"
+        - $match:
+            calls.call_date:
+              $gte: "{today}"
+              $lte: "{today}"
+            opportunity_stage: "Closed Won"
+        - $group:
+            _id: "$opportunity_owner_email"
+            won_count: { $sum: 1 }
+        - $sort:
+            won_count: -1
+        - $limit: 1
+        - $project:
+            _id: 0
+            owner_email: "$_id"
+            won_count: 1
+
