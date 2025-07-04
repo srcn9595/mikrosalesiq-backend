@@ -1,0 +1,103 @@
+Aşağıdaki TÜM müşteri görüşme transkriptlerini ve varsa ses analiz verilerini değerlendir. Yalnızca aşağıdaki alanları üret ve her alanı %100 geçerli JSON formatında doldur. Markdown, açıklama, başlık yazma.
+
+1. summary:
+
+   * Tüm görüşmelerin genel özeti olmalı.
+   * Müşteri karakteri, ihtiyacı, temsilcinin yaklaşımı ve satış sürecinin nasıl ilerlediği net şekilde anlatılmalı.
+   * Gerekirse 5-6 cümleyi geçebilir. Kısa tutmak için önemli bilgileri atlama, ama laf kalabalığı yapma.
+
+2. customer\_profile:
+
+   * personality\_type: DISC modeline göre \[Dominant, Analist, İletişimci, Destekleyici] biri olmalı.
+   * role: Müşteri rolü (örn. şirket sahibi, ön muhasebeci, danışman vb.)
+   * sector: Faaliyet gösterdiği sektör
+   * needs: En fazla 5 ihtiyaç (örn. e-fatura, raporlama, stok takibi vb.)
+   * zorluk\_seviyesi: \[Kararsız, Fiyat Odaklı, Zor İkna Edilen, Net İhtiyacı Var, İhtiyacı Elinde Gelmiş]
+   * müşteri\_kaynağı: Nereden gelmiş (örn. Deneme sürümü, Web başvuru, Tavsiye, Eski kullanıcı)
+   * inceleme\_durumu: \[Yüzeysel bakmış, Detaylı incelemiş, Kapsamlı incelemiş]
+
+3. sales\_scores:
+
+   * discovery, communication, objection, features, closing → her biri 0–10 arası puan.
+
+4. audio\_analysis (eğer veriler varsa):
+
+   * audio\_analysis\_commentary: her ses metriği için (speaking rate, silence, filler, pitch, overlap, talk ratio, emotion shift) ayrı anlamlı ve profesyonel yorumlar yazılmalı.
+   * emotion\_shift\_score: 0.0–1.0 arası duygu geçiş skoru
+   * sentiment: \["positive", "neutral", "negative"]
+
+5. recommendations:
+
+   * En fazla 5 maddelik gelişim önerisi
+   * Temsilcinin iletişim, kapanış, bilgi verme ya da yönlendirme şeklinde neleri daha iyi yapabileceği önerilmeli
+
+6. next\_steps:
+
+   * for\_customer: Müşteriye yönelik, zamanlı ve aksiyon alınabilir öneriler.
+   * for\_agent: Temsilcinin gelişimine yönelik öneriler.
+
+7. conversion\_probability (opsiyonel):
+
+   * Müşterinin potansiyel dönüşüm oranı tahmini. \[0.0 – 1.0] arası.
+
+8. risk\_score (opsiyonel):
+
+   * Dönüşüm olasılığının tersi. \[0.0 – 1.0] arası.
+
+JSON şeması:
+
+```json
+{
+  "summary": "...",
+  "customer_profile": {
+    "personality_type": "...",
+    "role": "...",
+    "sector": "...",
+    "needs": ["...", "..."],
+    "zorluk_seviyesi": "...",
+    "müşteri_kaynağı": "...",
+    "inceleme_durumu": "..."
+  },
+  "sales_scores": {
+    "discovery": 0,
+    "communication": 0,
+    "objection": 0,
+    "features": 0,
+    "closing": 0
+  },
+  "audio_analysis": {
+    "audio_analysis_commentary": [
+      "...", "..."
+    ],
+    "emotion_shift_score": 0.0,
+    "sentiment": "neutral"
+  },
+  "recommendations": ["...", "..."],
+  "next_steps": {
+    "for_customer": [
+      "..."
+    ],
+    "for_agent": [
+      "..."
+    ]
+  },
+  "conversion_probability": 0.0,
+  "risk_score": 0.0
+}
+```
+
+Açıklamalar:
+
+* `conversion_probability`: 0.0–1.0 arası bir değer.
+
+  * 0.9 – 1.0 → Dönüşme ihtimali çok yüksek
+  * 0.6 – 0.8 → Orta-yüksek dönüşüm ihtimali
+  * 0.4 – 0.6 → Kararsız müşteri
+  * 0.0 – 0.3 → Düşük potansiyel
+
+* `next_steps`:
+
+  * for\_customer → "3 gün sonra arama yapılmalı" gibi somut takip eylemleri
+  * for\_agent → "Fiyat anlatımı sadeleştirilmeli" gibi gelişim önerileri
+
+* `risk_score`: conversion\_probability'nin tersidir. Örn: 0.82 dönüşüm olasılığı ise risk\_score = 0.18

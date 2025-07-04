@@ -1,0 +1,164 @@
+{
+  "audio_jobs": {
+    "type": "object",
+    "description": "Müşteri bazlı tüm çağrı işleri, CRM alanları ve mini-RAG çıktıları",
+    "properties": {
+      "customer_num": { "type": "string" },
+      "account_name": { "type": "string" },
+      "opportunity_name":        { "type": "string" },
+      "opportunity_stage":       { "type": "string" },
+      "opportunity_owner":       { "type": "string" },
+      "opportunity_owner_email": { "type": "string" },
+
+      "lead_source":             { "type": "string" },
+      "close_date":              { "type": "datetime" },
+      "created_date":            { "type": "datetime" },
+
+      "product_lookup":          { "type": "string" },
+
+      "lost_reason":             { "type": ["string", "null"] },
+      "lost_reason_detail":      { "type": ["string", "null"] },
+
+      "contact_name":            { "type": "string" },
+      "contact_email":           { "type": "string" },
+      "job_status": { "type": "string" },
+      "calls": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "call_id":            { "type": "string" },
+            "call_key":           { "type": "string", "description": "AloTech storage key" },
+            "agent_email":        { "type": "string" },
+            "agent_name":         { "type": "string" },
+            "call_date":          { "type": "datetime" },
+            "direction":          { "type": "string", "enum": ["inbound", "outbound"] },
+            "status":             { "type": "string", "enum": ["queued", "downloaded", "transcribed", "cleaned"] },
+
+            "duration":           { "type": "number" },
+            "call_result":        { "type": "string" },
+
+            "downloaded_at":      { "type": "datetime" },
+            "file_path":          { "type": "string" },
+            "transcribed_at":     { "type": "datetime" },
+
+            "transcript":         { "type": "string" },
+            "cleaned_at":         { "type": "datetime" },
+            "cleaned_transcript": { "type": "string" }
+          },
+          "required": ["call_id", "agent_email", "call_date", "status"]
+        }
+      },
+
+"mini_rag": {
+  "type": "object",
+  "description": "Müşteri bazlı özet ve satış skorları",
+  "properties": {
+    "summary":     { "type": "string" },
+    "confidence":  { "type": "number" },
+    "token_count": { "type": "number" },
+
+    "customer_profile": {
+      "type": "object",
+      "properties": {
+        "personality_type": { "type": "string" },
+        "role":             { "type": "string" },
+        "sector":           { "type": "string" },
+        "needs":            { "type": "array", "items": { "type": "string" } },
+        "zorluk_seviyesi":  { "type": "string" },
+        "müşteri_kaynağı":  { "type": "string" },
+        "inceleme_durumu":  { "type": "string" }
+      }
+    },
+
+    "sales_scores": {
+      "type": "object",
+      "properties": {
+        "discovery":     { "type": "number" },
+        "communication": { "type": "number" },
+        "objection":     { "type": "number" },
+        "features":      { "type": "number" },
+        "closing":       { "type": "number" }
+      }
+    },
+
+    "recommendations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+
+    "next_steps": {
+      "type": "object",
+      "properties": {
+        "for_customer": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "for_agent": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "audio_analysis": {
+      "type": "object",
+      "properties": {
+        "audio_analysis_commentary": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "emotion_shift_score": { "type": "number" },
+        "sentiment": { "type": "string" }
+      }
+    },
+
+    "conversion_probability": { "type": "number" },
+    "risk_score":             { "type": "number" },
+    "merged_transcript":      { "type": "string" },
+    "generated_at":           { "type": "number" }
+    }
+  }
+    },
+    "required": ["customer_num", "calls"]
+  },
+
+
+  "call_insights": {
+    "type": "object",
+    "description": "Tek bir çağrıya ait satış-analiz çıktısı",
+    "properties": {
+      "call_id":      { "type": "string" },
+      "customer_num": { "type": "string" },
+      "summary":      { "type": "string" },
+
+      "customer_profile": {
+        "type": "object",
+        "properties": {
+          "personality_type": { "type": "string" },
+          "role":             { "type": "string" },
+          "sector":           { "type": "string" },
+          "needs":            { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["personality_type", "role", "sector"]
+      },
+
+      "sales_scores": {
+        "type": "object",
+        "properties": {
+          "discovery":     { "type": "number" },
+          "communication": { "type": "number" },
+          "objection":     { "type": "number" },
+          "features":      { "type": "number" },
+          "closing":       { "type": "number" }
+        }
+      },
+
+      "recommendations": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "required": ["call_id", "summary"]
+  }
+}

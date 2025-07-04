@@ -1,0 +1,10 @@
+[
+  "mongo_aggregate",
+  "enqueue_mini_rag",
+  "get_mini_rag_summary",
+  "write_call_insights",
+  "call_insights",
+  "get_random_transcripts",
+  "get_opportunity_info",
+  "get_call_metrics"
+]

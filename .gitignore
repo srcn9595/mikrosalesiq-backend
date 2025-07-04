@@ -1,0 +1,12 @@
+services/executor_api/third_party/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.env
+mongo_data/
+output/
+cleaned_output/
+recordings/
+docker/environment.yml
+Helper/Scripts/.env

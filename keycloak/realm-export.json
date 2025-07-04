@@ -1,0 +1,10 @@
+{
+  "id": "mikrosalesiq",
+  "realm": "mikrosalesiq",
+  "enabled": true,
+  "displayName": "MikroSalesIQ",
+  "loginTheme": "mikrogrupIQ",
+  "registrationEmailAsUsername": true,
+  "resetPasswordAllowed": true,
+  "registrationAllowed": false
+}

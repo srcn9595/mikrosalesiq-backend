@@ -1,0 +1,63 @@
+# 📦 Docker & Conda Ortam Yardımcısı: MikroSalesIQ Projesi
+
+
+## 🚀 Docker Base Image Oluşturma
+# Ortam kurulumunu gerçekleştiren Docker imajını inşa etmek için:
+docker build -f docker/Dockerfile.base -t deep_sercan_base docker/
+
+## 🐳 Docker Container'ı Çalıştırma
+# İnteraktif bir şekilde imajı çalıştırmak istersen:
+docker run -it --rm deep_sercan_base /bin/bash
+
+## 🧠 Conda Ortamı: deep_sercan
+# Ortamı aktifleştirmek için:
+conda activate deep_sercan
+
+# Ortamı devre dışı bırakmak için:
+conda deactivate
+
+## 📝 İçerikler:
+- environment.yml: conda bağımlılıkları
+- requirements.txt: pip ile yüklenecek bağımlılıklar
+
+## 🛠️ Ortamda Komut Çalıştırmak (örnek)
+conda run -n deep_sercan python main.py
+
+## 🔧 Dockerfile.base İçindeki Kurulum Aşamaları
+1. miniconda3 tabanlı image
+2. `environment.yml` üzerinden conda ortamı kurulumu
+3. `requirements.txt` üzerinden pip ile ek kütüphane kurulumu
+4. Sistem paketleri (örneğin: `portaudio19-dev`, `ffmpeg`) PyAudio gibi bağımlılıklar için kurulu
+
+## ❗ Önemli Notlar
+- `torch==x.x.x+cu118` gibi sürümler pip üzerinden yüklenecekse CUDA uyumuna dikkat et
+- `pyaudio` kurulumu için `portaudio19-dev` sistem paketi gerekir (Dockerfile içinde eklenmiştir)
+- NVIDIA paketlerini kullanıyorsan sadece bir CUDA sürümüyle uyumlu olanları bırak
+
+## 🔄 Ortamı Dışa Aktarmak (conda env backup)
+conda env export -n deep_sercan > environment.yml
+
+## ♻️ Ortamı Temizleyip Yeniden Kurmak
+conda env remove -n deep_sercan
+conda env create -n deep_sercan -f environment.yml
+
+##Docker a yeni bir kütüphane eklemek için yapılır.
+docker build -f docker/Dockerfile.base -t mikrosalesiq-base docker
+
+#Cache zorlaması yaparak her turlu güncelletir.
+docker build --pull --no-cache \
+    -f docker/Dockerfile.base \
+    -t mikrosalesiq-base:latest \
+    docker
+
+#Eğer cuda çalışmıyorsa test etmek için
+docker compose exec -T transcribe_worker python - <<'PY'
+import torch, torchvision, torchaudio, subprocess
+from torchvision.ops import nms
+print("Torch       :", torch.__version__)
+print("TorchVision :", torchvision.__version__)
+print("Torchaudio  :", torchaudio.__version__)
+print("CUDA device :", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "None")
+print("NMS op      :", "OK" if nms is not None else "MISSING")
+subprocess.run(["nvidia-smi"])
+PY

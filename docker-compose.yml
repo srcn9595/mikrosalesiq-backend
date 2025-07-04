@@ -1,0 +1,205 @@
+
+services:
+
+
+  # 2) Redis servisi
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # 3) intent_api servisi
+  intent_api:
+    build:
+      context: ./services/intent_api
+    restart: always
+    ports:
+      - "8001:8000"
+    env_file:
+      - ./.env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST}
+
+
+  # 4) chat_api servisi
+  chat_api:
+    build:
+      context: .
+      dockerfile: services/chat_api/Dockerfile
+    restart: always
+    ports:
+      - "8002:8000"
+    env_file:
+      - ./.env
+    environment:
+      - PYTHONPATH=/app:/app/shared_lib
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST}
+      
+
+  # 5) gateway_api servisi
+  gateway_api:
+    build:
+      context: .
+      dockerfile: services/gateway_api/Dockerfile
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    environment:
+      - PYTHONPATH=/app:/app/shared_lib
+      - INTENT_API_URL=${INTENT_API_URL}
+      - CHAT_API_URL=${CHAT_API_URL}
+      - EXECUTOR_API_URL=${EXECUTOR_API_URL}
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+    depends_on:
+      - intent_api
+      - chat_api
+      - executor_api
+
+  # 6) executor_api (FastAPI) servisi
+  executor_api:
+    build:
+      context: ./services/executor_api
+    restart: always
+    ports:
+      - "8003:8000"
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - REDIS_URL=${REDIS_URL}
+    depends_on:
+      - redis
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  # 7) download_worker servisi
+  download_worker:
+    build:
+      context: ./services/executor_api
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - REDIS_URL=${REDIS_URL}
+      - ALO_CLIENT_ID=${ALO_CLIENT_ID}
+      - ALO_CLIENT_SECRET=${ALO_CLIENT_SECRET}
+      - ALO_TOKEN_URL=${ALO_TOKEN_URL}
+      - ALO_TENANT=${ALO_TENANT}
+      - ALO_REC_API_TEMPLATE=${ALO_REC_API_TEMPLATE}
+      - DOWNLOAD_ROOT=${DOWNLOAD_ROOT}
+      - EXECUTOR_API_URL=${EXECUTOR_API_URL}
+    depends_on:
+      - redis
+    command: python download_worker.py
+    volumes:
+      - ./recordings:/app/recordings
+
+  # 8) transcribe_worker servisi
+  transcribe_worker:
+    build:
+      context: ./services/executor_api
+    restart: always
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - REDIS_URL=${REDIS_URL}
+      - DOWNLOAD_ROOT=${DOWNLOAD_ROOT}
+      - OUTPUT_ROOT=${OUTPUT_ROOT}
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HUB_ENABLE_HF_TRANSFER=${HF_HUB_ENABLE_HF_TRANSFER}
+      - NER_MODEL=${NER_MODEL}
+      - HF_LOCAL_ONLY=${HF_LOCAL_ONLY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - EXECUTOR_API_URL=${EXECUTOR_API_URL}
+    depends_on:
+      - redis
+    command: python transcribe_worker.py
+    volumes:
+      - ./recordings:/app/recordings
+      - ./output:/app/output
+
+  # 9) clean_worker servisi
+  clean_worker:
+    build:
+      context: ./services/executor_api
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - REDIS_URL=${REDIS_URL}
+      - OUTPUT_ROOT=${OUTPUT_ROOT}
+      - CLEANED_OUTPUT_ROOT=${CLEANED_OUTPUT_ROOT}
+      - EXECUTOR_API_URL=${EXECUTOR_API_URL}
+    depends_on:
+      - redis
+    command: python -m clean_transcript.clean_worker
+    volumes:
+      - ./output:/app/output
+      - ./cleaned_output:/app/cleaned_output
+
+     # 10) mini_rag_worker servisi
+  mini_rag_worker:
+    build:
+      context: ./services/executor_api
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - REDIS_URL=${REDIS_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST}
+      - EXECUTOR_API_URL=${EXECUTOR_API_URL}
+    depends_on:
+      - redis
+    command: python -m  mini_rag.mini_rag_worker
+
+    # 11) Keycloak servisi
+  keycloak:
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile.keycloak
+    command: start-dev                # resmî default zaten bu
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./.env
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://host.docker.internal:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: secretpassword
+      KC_DB_SCHEMA: keycloak   # ← yalnizca ayrı şema kullandıysanız!
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
