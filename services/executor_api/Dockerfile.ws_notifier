@@ -1,0 +1,7 @@
+FROM mikrosalesiq-base
+
+WORKDIR /app
+
+COPY services/executor_api/ws_notifier /app/ws_notifier
+
+CMD ["uvicorn", "ws_notifier.main:app", "--host", "0.0.0.0", "--port", "8010"]

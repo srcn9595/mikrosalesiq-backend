@@ -247,7 +247,7 @@ def main() -> None:
                         result={"transcribed": success},
                         error=None if success else "Transcription failed"
                     )
-                    finalize_notification_if_ready(db, notification_id)
+                    #finalize_notification_if_ready(db, notification_id)
             except Exception as e:
                 log.warning("Notification update failed: %s", e)
 

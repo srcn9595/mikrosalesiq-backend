@@ -3,6 +3,7 @@ import redis
 from typing import Any,List, Dict,Optional
 import json
 import logging
+log = logging.getLogger(__name__)
 from shared_lib.notification_utils import create_notification_job
 from datetime import datetime
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -163,19 +164,27 @@ def enqueue_mini_rag(
     notification_id: Optional[str] = None,
     mongo=None,
 ) -> Dict[str, Any]:
+    log.info(f"enqueue_mini_rag: customer_num={customer_num}, notification_id={notification_id}")
+
     # 1) Zaten varsa sadece pozisyonunu döner
     if is_mini_rag_enqueued(customer_num):
         all_items = [json.loads(x.decode()) for x in rds.lrange(_MINI_RAG_JOBS_KEY, 0, -1)]
         position = next((i + 1 for i, ctx in enumerate(all_items) if ctx["customer_num"] == customer_num), None)
         total_pending = len(all_items)
+        if position is None or total_pending == 0:
+            position = "?"
+            total_pending = "?"
         return {
             "already_enqueued": True,
             "position":         position,
             "total_pending":    total_pending,
         }
 
-    # 2) Redis’e ekle
-    context = {"customer_num": customer_num}
+    # 2) Redis’e ekle (notification_id'yi de context'e dahil et!)
+    context = {
+        "customer_num": customer_num,
+        "notification_id": notification_id  # Burada ekleniyor!
+    }
     rds.sadd(_MINI_RAG_ENQUEUED_SET, customer_num)
     rds.rpush(_MINI_RAG_JOBS_KEY, json.dumps(context))
     total_pending = rds.llen(_MINI_RAG_JOBS_KEY)

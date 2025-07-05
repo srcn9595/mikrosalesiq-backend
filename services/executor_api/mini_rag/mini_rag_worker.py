@@ -188,7 +188,7 @@ def run() -> None:
         rds.srem(_MINI_RAG_ENQUEUED_SET, customer_num)
         log.info("✅ Mini-RAG done: %s (calls=%d, tokens=%d)",
                  customer_num, len(cleaned), token_count)
-
+        log.info("Notification ID: %s", notification_id)
         # Bildirimi DONE yap
         if notification_id:
             from shared_lib.notification_utils import update_job_in_notification

@@ -249,7 +249,7 @@ def main(poll_interval: int = 5):
                         job_status="done",
                         result={"downloaded": True}
                     )
-                    finalize_notification_if_ready(db, notification_id) 
+                   # finalize_notification_if_ready(db, notification_id) 
                     log.info(f"Notification {notification_id} for call_id={call_id} updated to done.")
                     
                 except Exception as ex:
@@ -277,7 +277,7 @@ def main(poll_interval: int = 5):
                         job_status="error",
                         error=str(e)
                     )
-                    finalize_notification_if_ready(db, notification_id) 
+                   #finalize_notification_if_ready(db, notification_id) 
                     log.info(f"Notification {notification_id} for call_id={call_id} updated to error.")
                 except Exception as ex:
                     log.warning(f"Notification error update failed for {notification_id}: {ex}")

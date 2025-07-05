@@ -203,3 +203,19 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    
+    # 12) WebSocket servisi
+  ws_notifier:
+    build:
+      context: .
+      dockerfile: services/executor_api/Dockerfile.ws_notifier
+    command: uvicorn ws_notifier.main:app --host 0.0.0.0 --port 8010
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - REDIS_URL=${REDIS_URL}
+    ports:
+      - "8010:8010"
+    depends_on:
+      - redis

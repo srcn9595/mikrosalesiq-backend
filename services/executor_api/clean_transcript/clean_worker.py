@@ -141,7 +141,7 @@ def main(poll_interval: int = 5):
                     job_status="error",
                     error=str(e)
                 )
-                finalize_notification_if_ready(db, notif_id)
+               # finalize_notification_if_ready(db, notif_id)
                 log.info(f"Notification {notif_id} güncellendi: {call_id} için temizleme hatası.")
         update_job_status(customer_num)
 
