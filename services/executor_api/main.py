@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 from bson import json_util
 import json
 from mini_rag.mini_rag_sync_worker import generate_mini_rag_output 
-
 import mongo_utils
 import queue_utils
 from clean_transcript.clean_sync_worker import clean_transcript_sync

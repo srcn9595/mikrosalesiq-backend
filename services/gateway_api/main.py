@@ -56,10 +56,11 @@ async def analyze(request: Request):
     username = user_info.get("preferred_username", "")
     email = user_info.get("email", "")
     session_id = payload.get("session_id")
-
+    fcm_token = payload.get("fcm_token") 
+    
     session_id = create_chat_session_if_needed(user_id, session_id)
 
-    chat_id = insert_message(session_id, "user", {"type":"text", "content": query},user_id=user_id,username=username,email=email)
+    chat_id = insert_message(session_id, "user", {"type":"text", "content": query},user_id=user_id,username=username,email=email,fcm_token=fcm_token)
 
     # 1️⃣ Workflow kaydı oluştur
     workflow = {

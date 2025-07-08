@@ -60,6 +60,27 @@ INTENT_LEVEL_MAP = {
 def is_call_level_intent(intent: str) -> bool:
     return INTENT_LEVEL_MAP.get(intent) == "call"
 
+def fix_pipeline_keys_and_operators(obj):
+    """
+    Tüm dict key’lerindeki ve string operator değerlerindeki baştaki boşlukları düzeltir.
+    Rekürsif çalışır. Hem {" $gte": ...} hem de "$first": " $something" gibi yapıları düzeltir.
+    """
+    if isinstance(obj, dict):
+        new_obj = {}
+        for k, v in obj.items():
+            new_key = k.lstrip() if isinstance(k, str) else k
+            new_val = fix_pipeline_keys_and_operators(v)
+            if isinstance(new_val, str) and new_val.lstrip().startswith("$"):
+                new_val = new_val.lstrip()
+            new_obj[new_key] = new_val
+        return new_obj
+    elif isinstance(obj, list):
+        return [fix_pipeline_keys_and_operators(i) for i in obj]
+    else:
+        return obj
+
+
+
 def pipeline_is_call_level(pipeline: list[dict]) -> bool:
     """
     Pipeline’da $unwind "$calls" VARSA veya
@@ -314,6 +335,7 @@ async def analyze(req: Request):
 
                     if t["name"] == "mongo_aggregate":
                         pl = t["arguments"].get("pipeline", [])
+                        pl = fix_pipeline_keys_and_operators(pl)
                         intent = t.get("intent", "")
                         t["arguments"]["pipeline"] = ensure_call_id(pl, intent)
 

@@ -5,7 +5,7 @@ import os
 import httpx
 
 from shared_lib.response_utils import format_gateway_response
-from shared_lib.notification_ws import notify_user_ws
+from notification_fcm import notify_user_fcm
 from shared_lib.async_tools import ASYNC_TOOLS
 
 
@@ -201,6 +201,56 @@ def get_notification_id_for_call(mongo, call_id):
     })
     return str(notif["_id"]) if notif else None
 
+from bson import ObjectId
+
+def update_notification_with_user_and_session(mongo, notification_id: str) -> bool:
+    # Notification'ı al
+    notif = mongo.notifications.find_one({"_id": ObjectId(notification_id)})
+    if not notif:
+        print(f"Notification {notification_id} bulunamadı.")
+        return False
+
+    chat_message_id = notif.get("chat_message_id")
+    if not chat_message_id:
+        print(f"Notification {notification_id} için chat_message_id bulunamadı.")
+        return False
+
+    # Chat message'ı al
+    chat_message = mongo.chat_messages.find_one({"_id": ObjectId(chat_message_id)})
+    if not chat_message:
+        print(f"Chat message {chat_message_id} bulunamadı.")
+        return False
+
+    # User ID ve Session ID'yi al
+    user_id = chat_message.get("user_id")
+    session_id = chat_message.get("session_id")
+    fcm_token = chat_message.get("fcm_token")  # FCM token'ı alıyoruz
+    
+    # Chat mesajının content kısmını al
+    content = chat_message.get("content")
+    if not content:
+        print(f"Chat message {chat_message_id} için content bulunamadı.")
+        return False
+
+    # Notification'ı güncelle
+    if user_id and session_id and fcm_token:  # Artık fcm_token da var
+        mongo.notifications.update_one(
+            {"_id": ObjectId(notification_id)},
+            {"$set": {
+                "user_id": user_id,
+                "session_id": session_id,
+                "title": content,  # Chat message content'i title olarak güncelleniyor
+                "fcm_token": fcm_token  # FCM token'ı da ekliyoruz
+            }}
+        )
+        # Güncellenmiş Notification objesini geri döndür
+        updated_notif = mongo.notifications.find_one({"_id": ObjectId(notification_id)})
+        print(f"Notification {notification_id} güncellendi: user_id, session_id, title ve fcm_token set edildi.")
+        return updated_notif  # Güncellenmiş objeyi döndür
+    else:
+        print(f"Chat message {chat_message_id} için user_id, session_id veya fcm_token eksik.")
+        return False
+
 
 def finalize_notification_if_ready(mongo, notification_id: str) -> bool:
     import logging
@@ -251,26 +301,42 @@ def finalize_notification_if_ready(mongo, notification_id: str) -> bool:
     log.info(f"[{notification_id}] Tüm koşullar tamam, gateway'e post atılıyor. Plan: {plan}")
     executor_base = os.getenv("EXECUTOR_API_URL", "http://executor_api:8000")
     executor_url  = f"{executor_base}/execute"
-    resp = httpx.post(executor_url, json=plan, timeout=30)
-    resp.raise_for_status()
-    executor_json = resp.json()
+    
+    try:
+        if notif.get("user_id") is None or notif.get("session_id") is None:
+            notif= update_notification_with_user_and_session(mongo, notification_id)
 
-    log.info(f"[{notification_id}] Gateway cevabı: {executor_json}")
+        # Executor'a istek gönderir
+        resp = httpx.post(executor_url, json=plan, timeout=30)
+        resp.raise_for_status()
+        executor_json = resp.json()
 
-    executor_json["plan"] = plan
-    formatted = format_gateway_response(executor_json)
+        executor_json["plan"] = plan
+        formatted = format_gateway_response(executor_json)
 
-    mongo.notifications.update_one(
-        {"_id": ObjectId(notification_id)},
-        {"$set": {
-            "status":       "done",
-            "completed_at": datetime.utcnow(),
-            "result":       formatted
-        }}
-    )
-    log.info(f"[{notification_id}] Notification güncellendi ve finalize edildi.")
+        mongo.notifications.update_one(
+            {"_id": ObjectId(notification_id)},
+            {"$set": {
+                "status":       "done",
+                "completed_at": datetime.utcnow(),
+                "result":       formatted
+            }}
+        )
+        log.info(f"[{notification_id}] Notification güncellendi ve finalize edildi.")
 
-    if notif.get("user_id"):
-        notify_user_ws(user_id=notif["user_id"],notification_id=notification_id)
-    return True
+        if notif.get("fcm_token"):
+            extra_data = {
+                "session_id": notif.get("session_id"),
+                "title":notif.get("title"),
+            }
+           # notify_user_fcm(fcm_token=notif["fcm_token"], title=notif["title"], body=notif["title"], data=extra_data)
+        return True
+
+    except httpx.RequestError as e:
+        log.error(f"[{notification_id}] Gateway'e istek gönderilemedi: {e}")
+        return False
+
+
+
+
 

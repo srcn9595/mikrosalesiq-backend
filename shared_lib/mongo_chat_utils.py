@@ -47,7 +47,7 @@ def get_chat_messages_for_session(session_id: str, user_id: Optional[str] = None
         for msg in messages
     ]
 
-def insert_message(session_id: str, role: str, content: Union[str, dict], user_id: Optional[str] = None, username: Optional[str] = None, email: Optional[str] = None):
+def insert_message(session_id: str, role: str, content: Union[str, dict], user_id: Optional[str] = None, username: Optional[str] = None, email: Optional[str] = None,fcm_token: Optional[str] = None):
     doc = {
         "session_id": session_id,
         "role": role,
@@ -64,6 +64,7 @@ def insert_message(session_id: str, role: str, content: Union[str, dict], user_i
     if user_id: doc["user_id"] = user_id
     if username: doc["username"] = username
     if email: doc["email"] = email
+    if fcm_token: doc["fcm_token"]=fcm_token
 
     res = chat_messages_coll.insert_one(doc)
     return str(res.inserted_id) 
