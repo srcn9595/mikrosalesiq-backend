@@ -149,5 +149,28 @@
         "additionalProperties": false
       }
     }
+  },
+  {
+  "type": "function",
+  "function": {
+    "name": "vector_customer_similarity_search",
+    "description": "Vektör benzerlik ile müşteri analizi – profil, sektör, risk vb. alanlara göre benzer müşteri bulur.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "customer_num": {
+          "type": "string",
+          "description": "Analizi yapılacak referans müşteri numarası"
+        },
+        "top_k": {
+          "type": "integer",
+          "default": 5,
+          "description": "Dönmesi istenen benzer müşteri sayısı"
+        }
+      },
+      "required": ["customer_num"],
+      "additionalProperties": false
+    }
   }
+}
 ]

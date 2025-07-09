@@ -3,12 +3,16 @@ import httpx, os, urllib.parse as up
 from typing import Any, Dict
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
-import logging
 import pathlib, json
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+import logging
+log = logging.getLogger("gateway_api")
+logging.basicConfig(level=logging.INFO)
+
 from shared_lib.mongo_chat_utils import insert_message, create_chat_session_if_needed
 from shared_lib.jwt_utils import verify_token
+
 
 def ensure_path(url: str, suffix: str) -> str:
     parts = up.urlparse(url)
@@ -51,12 +55,14 @@ async def analyze(request: Request):
     if not isinstance(query, str) or not query.strip():
         raise HTTPException(400, "Geçersiz query parametresi.")
     
-    # 0️⃣ Yeni session başlat ve ilk mesajı kaydet
+
     user_id = user_info.get("sub") or "unknown"
     username = user_info.get("preferred_username", "")
     email = user_info.get("email", "")
     session_id = payload.get("session_id")
     fcm_token = payload.get("fcm_token") 
+    user_roles = user_info.get("roles",[])
+    logging.info(user_roles)
     
     session_id = create_chat_session_if_needed(user_id, session_id)
 
@@ -76,11 +82,25 @@ async def analyze(request: Request):
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         # 2️⃣ Intent API’den plan al
-        intent_resp = await client.post(INTENT_API_URL, json={"query": query})
-        intent_resp.raise_for_status()
-        intent_json = intent_resp.json()
-        plan = intent_json.get("plan", [])
-
+        try:            
+            intent_resp = await client.post(INTENT_API_URL, json={"query": query})
+            intent_resp.raise_for_status()
+            intent_json = intent_resp.json()
+            plan = intent_json.get("plan", [])
+        except Exception:
+            return {"type":"text","content":"Lütfen mesajınızı doğru formatta gönderiniz.Hata olduğunu düşünüyorsanız geri bildirim veriniz.","session_id":session_id}
+        
+        if (
+            not isinstance(plan, list) or 
+            not plan or 
+            "error" in intent_json
+            ):
+            err_msg = intent_json.get("error") or "İşleminiz için bir plan oluşturulamadı. Lütfen farklı bir mesaj deneyin."
+            return {
+                "type": "text",
+                "content": err_msg,
+                "session_id": session_id
+            }
         for step in plan:
             if "arguments" in step:
                 step["arguments"]["chat_message_id"] = str(chat_id)
@@ -89,7 +109,28 @@ async def analyze(request: Request):
             {"_id": wf_id},
             {"$set": {"plan": plan}}
         )
+        from shared_lib.rbac_utilts import get_user_permissions,is_intent_allowed,are_tools_allowed
+        intent_name = intent_json.get("intent", "")
+        user_perms = get_user_permissions(user_roles)
+        log.info(user_perms)
+        allowed_intents = user_perms["intents"]
+        allowed_tools = user_perms["tools"]
+        
+        if not is_intent_allowed(intent_name, allowed_intents):
+             return {
+                "type": "text",
+                "content": "Bu işlemi gerçekleştirme yetkiniz bulunmamaktadır. Hata olduğunu düşünüyorsanız lütfen geri bildirim veriniz.",
+                 "session_id": session_id
+         }
 
+        if not are_tools_allowed(plan, allowed_tools):
+            return {
+                 "type": "text",
+                 "content": "Plan içindeki bazı adımlara erişiminiz yok. Lütfen yetkilerinizle uyumlu bir sorgu girin.",
+                 "session_id": session_id
+         }
+        
+        
         # 3️⃣ meta_about_creator special case
         if any(step.get("name") == "meta_about_creator" for step in plan):
             await mongo.analysis_workflows.update_one(

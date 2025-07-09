@@ -19,6 +19,8 @@ def verify_token(auth_header: str) -> dict:
             options={"verify_aud": False},
             issuer=KEYCLOAK_ISSUER
         )
+        realm_roles = payload.get("realm_access",{}).get("roles",[])
+        payload["roles"] = realm_roles
         return payload
     except JWTError as e:
         raise HTTPException(status_code=401, detail=f"Geçersiz token: {e}")

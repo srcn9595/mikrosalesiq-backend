@@ -310,15 +310,15 @@ async def analyze(req: Request):
                 )
 
                 msg_raw = resp.choices[0].message
-                if msg_raw.tool_calls:                       # yeni SDK yolu
+                if msg_raw.tool_calls:                      
                      raw = [
-                        {                                    # normalize_plan / tidy beklediği format
+                        {                                 
                             "name": tc.function.name,
                             "arguments": json.loads(tc.function.arguments)
                   }
-                   for tc in msg_raw.tool_calls         # tc: ChatCompletionMessageToolCall
+                   for tc in msg_raw.tool_calls       
                 ]
-                else:                                        # eski (content) yolu
+                else:                                       
                     raw = json.loads(msg_raw.content)
                 try:
                     steps   = normalize_plan(raw)

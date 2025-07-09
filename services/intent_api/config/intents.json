@@ -1,22 +1,25 @@
 [
-  {
-    "intent": "get_call_dates",
-    "description": "Bir müşteriyle hangi tarihlerde görüşme yapıldığını listeler",
-    "examples": [
-      "0544 ile hangi günlerde konuşulmuş?",
-      "Bu müşteriyle ne zaman görüşmüşüz?",
-      "05011345074 aramalarının tarihleri nedir?"
-    ]
-  },
-  {
-    "intent": "get_last_call",
-    "description": "Müşterinin veya temsilcinin yaptığı son görüşmeyi (tarih + agent) getirir",
-    "examples": [
-      "05445118257 en son kimle görüşmüş?",
-      "arda.eksioglu@parasut.com'un son konuşması ne zaman?",
-      "0501… numarasıyla yapılan en güncel çağrı?"
-    ]
-  },
+{
+  "intent": "get_call_dates",
+  "description": "Belirli bir müşteriyle yapılan çağrıların tarihlerini sıralar.",
+  "examples": [
+    "0544 ile hangi günlerde konuşulmuş?",
+    "Bu müşteriyle ne zaman görüşmüşüz?",
+    "05011345074 aramalarının tarihleri nedir?",
+    "Bu numarayla geçmişte yapılan tüm çağrı tarihlerini göster",
+    "Müşteriyle yapılan inbound çağrıların tarihlerini ver"
+  ]
+}
+,
+{
+  "intent": "get_last_call",
+  "description": "Belirli bir müşteri veya temsilcinin yaptığı en son çağrının tarihini ve temsilci adını getirir",
+  "examples": [
+    "05445118257 en son kimle görüşmüş?",
+    "arda.eksioglu@parasut.com'un son konuşması ne zaman?",
+    "0501… numarasıyla yapılan en güncel çağrı?"
+  ]
+},
   {
     "intent": "get_transcript_by_call_id",
     "description": "Tek bir call_id için cleaned transcript’i döner; yoksa kuyruğa atılması gerekir",
@@ -62,15 +65,28 @@
       "Müşteri bazlı performans raporu çıkar"
     ]
   },
-  {
-    "intent": "semantic_search",
-    "description": "Konuşma içeriğinde verilen anahtar kavramı semantik olarak arar (Pinecone)",
-    "examples": [
-      "E-fatura kurulumu geçen kayıtları bul",
-      "KDV itirazı yapılan konuşmalar",
-      "mobil uygulama hatası hakkında görüşme var mı"
-    ]
-  },
+ {
+  "intent": "semantic_search",
+  "description": "Görüşme transkriptlerinde verilen kavramı veya konuyu semantik olarak arar (Qdrant kullanır)",
+  "examples": [
+    "E-fatura kurulumu geçen kayıtları bul",
+    "KDV itirazı yapılan konuşmalar",
+    "mobil uygulama hatası hakkında görüşme var mı",
+    "uzaktan bağlantı kurulamadı diyen müşteriler"
+  ]
+},
+{
+  "intent": "vector_customer_similarity_search",
+  "description": "Müşteri profil, ihtiyaç, sektör, risk skoru vb. yapılar üzerinden vektörel olarak benzer müşterileri bulur ve bu müşterilerden yola çıkarak analiz yapar",
+  "examples": [
+    "Bu müşteriye benzeyenler neden kaybedilmiş?",
+    "Benzer müşteriler en çok hangi ürünleri almış?",
+    "E-fatura isteyen ama vazgeçen müşteriler ne yapmış?",
+    "Kararsız müşteri tipine sahip olanların kapanış tarihi ne olmuş?",
+    "Risk skoru 0.5’e yakın olanların kayıp nedeni nedir?",
+    "Analist kişiliğe sahip müşteriler genelde ne ister?"
+  ]
+},
   {
     "intent": "get_customer_products",
     "description": "CRM/SFA entegrasyonundan müşterinin sahip olduğu ürün/paket listesini getirir",
@@ -169,6 +185,33 @@
     "Bu müşteri olumlu muydu?",
     "Duygusal dalgalanma var mı?",
     "Genel ruh hali neydi?"
+  ]
+},
+{
+  "intent": "get_sales_scores",
+  "description": "Bir görüşmenin satış skorlarını (discovery, closing, objection vb.) döner",
+  "examples": [
+    "Bu konuşmanın satış skorları nedir?",
+    "Discovery ve Closing puanlarını verir misin?",
+    "Görüşmedeki objection score kaç?"
+  ]
+},
+{
+  "intent": "get_summary_by_call",
+  "description": "Bir çağrıya ait mini_rag özetini döner",
+  "examples": [
+    "Bu konuşmanın kısa özetini ver",
+    "ast25… görüşmesinde ne konuşulmuş?",
+    "Çağrı özetini göster"
+  ]
+},
+{
+  "intent": "get_personality_and_sector",
+  "description": "Müşterinin kişilik tipi ve sektörel profilini verir (mini_rag.customer_profile.personality_type, sector)",
+  "examples": [
+    "Bu müşteri analist mi?",
+    "Hangi sektörde çalışıyor?",
+    "Profilinde sektör bilgisi var mı?"
   ]
 }
 
