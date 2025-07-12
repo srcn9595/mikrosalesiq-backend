@@ -2,9 +2,9 @@
 
 from typing import List, Set
 from enum import Enum
-from shared_lib.rbac_policy import RBAC_POLICIES
-from shared_lib.intents_enum import IntentName
-from shared_lib.tool_enum import AllowedToolName
+from shared_lib.rbac.rbac_policy import RBAC_POLICIES
+from shared_lib.rbac.intents_enum import IntentName
+from shared_lib.rbac.tool_enum import AllowedToolName
 
 
 def get_user_permissions(user_roles: List[str]) -> dict:

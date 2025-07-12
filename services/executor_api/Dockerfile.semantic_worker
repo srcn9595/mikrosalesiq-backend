@@ -1,0 +1,10 @@
+# Dockerfile.semantic_worker
+FROM mikrosalesiq-base
+
+WORKDIR /app
+COPY . /app/
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app:/app/shared_lib
+
+CMD ["python", "-m", "semantic_search.semantic_async_worker"]

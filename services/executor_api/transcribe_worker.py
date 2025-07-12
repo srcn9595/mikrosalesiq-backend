@@ -187,6 +187,16 @@ def main() -> None:
             out_dir = Path(OUTPUT_ROOT) / customer
             out_dir.mkdir(parents=True, exist_ok=True)
             (out_dir / f"{call_id}.txt").write_text(clean_txt, encoding="utf-8")
+            audio.update_one(
+                {"calls.call_id": call_id},
+                {"$set": {
+                     "calls.$.segments": aligned,
+                     "calls.$.raw_transcript": raw_txt,
+                     "calls.$.transcript":   clean_txt,
+                     "calls.$.transcribed_at": datetime.utcnow(),
+                     "calls.$.retry_count":   retries
+                }}
+            )            
 
             if process_call(call_id):
                 log.info("🔊 Audio features senkron eklendi.")
@@ -196,12 +206,7 @@ def main() -> None:
             audio.update_one(
                 {"calls.call_id": call_id},
                 {"$set": {
-                    "calls.$.status": "transcribed",
-                    "calls.$.raw_transcript": raw_txt,
-                    "calls.$.transcript":   clean_txt,
-                    "calls.$.transcribed_at": datetime.utcnow(),
-                    "calls.$.retry_count":   retries,
-                    "calls.$.segments": aligned
+                    "calls.$.status": "transcribed"
                 }}
             )
             success = True

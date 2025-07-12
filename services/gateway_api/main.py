@@ -32,7 +32,7 @@ MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB  = os.getenv("MONGO_DB", "miksalesiq")
 mongo     = AsyncIOMotorClient(MONGO_URI)[MONGO_DB]
 
-TIMEOUT = httpx.Timeout(30.0, read=30.0)
+TIMEOUT = httpx.Timeout(60.0, read=60.0)
 app = FastAPI()
 
 ROOT_DIR   = pathlib.Path(__file__).parent
@@ -109,7 +109,7 @@ async def analyze(request: Request):
             {"_id": wf_id},
             {"$set": {"plan": plan}}
         )
-        from shared_lib.rbac_utilts import get_user_permissions,is_intent_allowed,are_tools_allowed
+        from shared_lib.rbac.rbac_utilts import get_user_permissions,is_intent_allowed,are_tools_allowed
         intent_name = intent_json.get("intent", "")
         user_perms = get_user_permissions(user_roles)
         log.info(user_perms)

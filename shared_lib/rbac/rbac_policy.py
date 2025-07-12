@@ -4,8 +4,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from shared_lib.intents_enum import IntentName
-from shared_lib.tool_enum import AllowedToolName
+from shared_lib.rbac.intents_enum import IntentName
+from shared_lib.rbac.tool_enum import AllowedToolName
 
 RBAC_POLICIES = {
     "ROLE_SUPER_ADMIN": {

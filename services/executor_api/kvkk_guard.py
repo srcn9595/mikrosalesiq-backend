@@ -39,8 +39,8 @@ def mask_email_word(email: str) -> str:
         return "****@****"
 
 def mask_emails(text: str) -> str:
-    return re.sub(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-                  lambda m: mask_email_word(m.group()), text)
+    EMAIL_REGEX = r'[^\s@]+@[^\s@]+\.[^\s@]+'
+    return re.sub(EMAIL_REGEX, lambda m: mask_email_word(m.group()), text)
 
 def mask_iban(text: str) -> str:
     return re.sub(r'\bTR\d{2}(?:[ ]?\d{4}){5}(?:[ ]?\d{0,2})?\b',

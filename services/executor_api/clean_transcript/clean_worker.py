@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-import os, time, logging, redis, pymongo
+import os, time, json, logging, redis, pymongo
 from datetime import datetime
 from pathlib import Path
 from clean_transcript.clean_utils import generate_cleaned_transcript_sync, chunks_by_tokens
+from queue_utils import mark_semantic_enqueued
 from shared_lib.notification_utils import (
     get_notification_id_for_call, 
     update_job_in_notification,
@@ -28,23 +29,50 @@ audio = db[AUDIO_COLL]
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(message)s")
 log = logging.getLogger("clean_worker")
 
-def try_enqueue_mini_rag_if_all_cleaned(customer_num: str, notification_id: str):
-    """
-    Tüm çağrılar 'cleaned' ise mini_rag kuyruğuna alır. 
-    Sadece notification_id varsa çalışır (manuel tetiklenmeyenler için asla trigger yapma!)
-    """
-    doc = audio.find_one({"customer_num": customer_num}, {"calls.status": 1})
-    calls = doc.get("calls", [])
-    if all(c.get("status") == "cleaned" for c in calls) and len(calls) > 0:
-        from queue_utils import enqueue_mini_rag
-        # SADECE notification_id varsa triggerla!
-        if notification_id:
-            enqueue_mini_rag(customer_num, notification_id=notification_id, mongo=db)
-            log.info(f"[AUTO-TRIGGER] {customer_num} için tüm çağrılar cleaned → mini_rag kuyruğuna eklendi.")
-        else:
-            # Otomatik tetikleme yapılmaz!
-            log.warning(f"[AUTO-TRIGGER BLOCKED] {customer_num}: notification_id yok, mini_rag atlanıyor.")
+def is_summary_valid(call_data):
+    af = call_data.get("audio_features")
+    if not af or not isinstance(af, dict):
+        return False
 
+    # Aşağıdaki metriklerin 0 olması, işlem yapılmadığını gösterebilir
+    # Bu yüzden en azından biri 0'dan büyük olmalı
+    metrics = [
+        af.get("agent_pitch_variance", 0),
+        af.get("customer_pitch_variance", 0),
+        af.get("speaking_rate_customer", 0),
+        af.get("speaking_rate_agent", 0),
+        af.get("agent_talk_ratio", 0),
+        af.get("customer_filler_count", 0)
+    ]
+
+    return any(m > 0 for m in metrics)
+
+
+def try_enqueue_mini_rag_if_all_cleaned(customer_num: str, notification_id: str):
+    doc = audio.find_one({"customer_num": customer_num}, {"calls": 1, "mini_rag": 1})
+    calls = doc.get("calls", [])
+
+    if not calls or len(calls) == 0:
+        return
+
+    for c in calls:
+        if c.get("status") != "cleaned":
+            log.warning(f"[BLOCKED] {customer_num} → {c.get('call_id')} henüz 'cleaned' değil.")
+            return
+        if not is_summary_valid(c):
+            log.warning(f"[BLOCKED] {customer_num} → {c.get('call_id')} için summary geçersiz.")
+            return
+
+    if doc.get("mini_rag", {}).get("generated_at"):
+        log.info(f"[SKIP] {customer_num} için mini_rag zaten mevcut, tekrar kuyruğa alınmadı.")
+        return
+
+    from queue_utils import enqueue_mini_rag
+    if notification_id:
+        enqueue_mini_rag(customer_num, notification_id=notification_id, mongo=db)
+        log.info(f"[✅ TRIGGERED] {customer_num} → Tüm çağrılar cleaned ve valid → mini_rag kuyruğa eklendi.")
+    else:
+        log.warning(f"[BLOCKED] {customer_num}: notification_id yok, mini_rag atlanıyor.")
 
 
 def update_job_status(customer_num: str):
@@ -69,16 +97,18 @@ def main(poll_interval: int = 5):
         if not job:
             time.sleep(poll_interval)
             continue
+
         call_id = job.decode()
         doc = audio.find_one({"calls.call_id": call_id}, {"calls.$": 1, "customer_num": 1})
         if not doc or not doc.get("calls"):
             log.warning(f"call_id={call_id} için kayıt bulunamadı.")
             continue
-        call = doc["calls"][0]
 
+        call = doc["calls"][0]
         if call.get("status") == "cleaned" and call.get("cleaned_transcript"):
-           log.info(f"call_id={call_id} zaten cleaned, iş atlandı.")
-           continue
+            log.info(f"call_id={call_id} zaten cleaned, iş atlandı.")
+            continue
+
         raw_text = call.get("transcript")
         if not raw_text:
             log.warning(f"call_id={call_id} transcript boş.")
@@ -87,29 +117,45 @@ def main(poll_interval: int = 5):
                 {"$set": {"calls.$.status": "error", "calls.$.error": "no transcript"}}
             )
             continue
+
         customer_num = doc["customer_num"]
         call_date    = call.get("call_date", "Tarih bilinmiyor")
+
         try:
             chunks = chunks_by_tokens(raw_text, 8000)
-            cleaned = "\n\n".join(
-                generate_cleaned_transcript_sync(call_id, part, call_date)
-                for part in chunks
-            )
+            if len(chunks) > 1:
+                raise ValueError(f"{call_id} için transcript çok uzun, tek parçada işlenmeli.")
 
-            # Write to disk
+            llm_response = generate_cleaned_transcript_sync(call_id, raw_text, call_date, audio_features=call.get("audio_features", {}))
+
+
+            if not llm_response.strip():
+                raise ValueError(f"LLM yanıtı boş geldi! call_id={call_id}")
+
+            try:
+                parsed = json.loads(llm_response)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Yanıt JSON değil: {e}\nYanıt:\n{llm_response[:500]}")
+
+            # Dosyaya sadece transcript yaz
             Path(CLEANED_DIR, customer_num).mkdir(parents=True, exist_ok=True)
-            Path(CLEANED_DIR, customer_num, f"{call_id}.txt").write_text(cleaned, encoding="utf-8")
+            Path(CLEANED_DIR, customer_num, f"{call_id}.txt").write_text(parsed["cleaned_transcript"], encoding="utf-8")
 
             audio.update_one(
                 {"calls.call_id": call_id},
                 {"$set": {
+                    "calls.$.cleaned_transcript": parsed.get("cleaned_transcript", ""),
+                    "calls.$.difficulty_level": parsed.get("difficulty_level", ""),
+                    "calls.$.sentiment": parsed.get("sentiment", ""),
+                    "calls.$.direction": parsed.get("direction", ""),
+                    "calls.$.audio_analysis_commentary": parsed.get("audio_analysis_commentary", []),
+                    "calls.$.needs": parsed.get("needs", []),
                     "calls.$.status": "cleaned",
-                    "calls.$.cleaned_transcript": cleaned,
                     "calls.$.cleaned_at": datetime.utcnow()
                 }}
             )
             log.info(f"✅ Temizleme tamam: {call_id}")
-            # --- Notification güncelle (success) ---
+
             notif_id = get_notification_id_for_call(db, call_id)
             if notif_id:
                 update_job_in_notification(
@@ -120,17 +166,31 @@ def main(poll_interval: int = 5):
                     job_status="done",
                     result={"cleaned": True}
                 )
-                finalize_notification_if_ready(db, notif_id)
-                log.info(f"Notification {notif_id} güncellendi: {call_id} için temizleme tamamlandı.")
 
-            try_enqueue_mini_rag_if_all_cleaned(customer_num, notification_id=notif_id)
+                # Semantic embedding kuyruğuna al
+                if call.get("embedding_created_at"):
+                    log.info(f"{call_id} → Zaten embedding yapılmış, kuyruğa eklenmedi.")
+                else:
+                    mark_semantic_enqueued(call_id)
+                    log.info(f"{call_id} → Semantic kuyruğa eklendi.")
+
+                # Audio summary valid mi kontrol et
+                audio_doc = audio.find_one({"calls.call_id": call_id}, {"calls.$": 1})
+                call_data = audio_doc["calls"][0]
+                if is_summary_valid(call_data):
+                    finalize_notification_if_ready(db, notif_id)
+                    try_enqueue_mini_rag_if_all_cleaned(customer_num, notification_id=notif_id)
+                    log.info(f"🔁 Notification finalize edildi & mini_rag kontrolü yapıldı: {call_id}")
+                else:
+                    log.warning(f"🕓 audio_features_summary eksik → finalize/mini_rag tetiklenmedi: {call_id}")    
+
+
         except Exception as e:
             log.error(f"❌ Temizleme hatası: {call_id} - {e}")
             audio.update_one(
                 {"calls.call_id": call_id},
                 {"$set": {"calls.$.status": "error", "calls.$.error": str(e)}}
             )
-            # --- Notification güncelle (error) ---
             notif_id = get_notification_id_for_call(db, call_id)
             if notif_id:
                 update_job_in_notification(
@@ -141,7 +201,6 @@ def main(poll_interval: int = 5):
                     job_status="error",
                     error=str(e)
                 )
-               # finalize_notification_if_ready(db, notif_id)
                 log.info(f"Notification {notif_id} güncellendi: {call_id} için temizleme hatası.")
         update_job_status(customer_num)
 

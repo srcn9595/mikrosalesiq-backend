@@ -27,6 +27,25 @@ def make_seekable(src: str) -> str:
     )
     return dst
 
+def is_audio_features_ready(af: dict | None) -> bool:
+    """
+    Çıkarılan metriklerin dolu olup olmadığını hızla kontrol eder.
+    En azından BİR tanesi sıfırdan büyükse True döner.
+    """
+    if not af or not isinstance(af, dict):
+        return False
+
+    metrics = [
+        af.get("agent_pitch_variance", 0),
+        af.get("customer_pitch_variance", 0),
+        af.get("speaking_rate_customer", 0),
+        af.get("speaking_rate_agent", 0),
+        af.get("agent_talk_ratio", 0),
+        af.get("customer_filler_count", 0),
+    ]
+    return any(m > 0 for m in metrics)
+
+
 def process_call(call_id: str) -> bool:
     log.info(f"🎿 İşleniyor: call_id={call_id}")
     collection = mongo["audio_jobs"]
@@ -55,15 +74,18 @@ def process_call(call_id: str) -> bool:
     features = extract_audio_features(audio_path, call_id, collection)
 
     if not features:
-        log.warning(f"❌ Özellik çıkartılamadı: {call_id}")
+        log.warning("❌ Özellik çıkartılamadı: %s (detay log'a bak)", call_id)
         return False
 
-    mongo.audio_jobs.update_one(
-        {"calls.call_id": call_id},
-        {"$set": {"calls.$.audio_features": features}}
+    collection.update_one(
+        {"calls.call_id":call_id},
+        {
+            "$set":{
+                "calls.$.audio_features": features,
+                "calls.$.status":"features_done"
+            }
+        }
     )
-
-    log.info(f"✅ audio_features eklendi: {call_id}")
     return True
 
 def worker_loop():

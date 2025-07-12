@@ -2,15 +2,24 @@ import librosa
 import numpy as np
 from collections import defaultdict
 import os
+import logging,traceback
 from transformers import pipeline
+
+log = logging.getLogger("audio_features")
 classifier = pipeline("text-classification", model="savasy/bert-base-turkish-sentiment-cased", return_all_scores=True)
 
 def extract_audio_features(audio_path: str, call_id: str, collection) -> dict:
     try:
         y, sr = librosa.load(audio_path, sr=None)
         duration = librosa.get_duration(y=y, sr=sr)
+        log.debug("Loaded wav: sr=%d  duration=%.2f", sr, duration)
 
         segments = get_diarization_segments(call_id, collection)
+        if not segments:
+            log.error("Diarization segments boş! call_id=%s", call_id)
+            return {}
+
+
         for seg in segments:
             seg["speaker"] = normalize_speaker(seg.get("speaker"))
 
@@ -59,7 +68,8 @@ def extract_audio_features(audio_path: str, call_id: str, collection) -> dict:
         }
 
     except Exception as e:
-        print(f"[ERR] Audio feature extraction failed: {e}")
+        log.error("[%s] feature extraction crash: %s\n%s",
+                  call_id, e, traceback.format_exc(limit=2))
         return {}
 # --- Yardımcı fonksiyonlar ---
 

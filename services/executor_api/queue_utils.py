@@ -20,6 +20,8 @@ _AUDIO_FEATURES_ENQUEUED_SET    = "audio_features_enqueued_set"
 _CLEAN_JOBS_KEY                 = "clean_jobs"
 _CLEAN_ENQUEUED_SET             = "clean_enqueued_set"
 _FAILED_JOBS_KEY                = "failed_jobs"
+_SEMANTIC_JOBS_KEY              = "semantic_jobs"
+_SEMANTIC_ENQUEUED_SET          = "semantic_enqueued_set"
 
 
 
@@ -304,3 +306,13 @@ def enqueue_audio_features(call_ids: List[str]) -> Dict[str, int | list | dict]:
         "positions":          positions,
         "all_queued":         all_queued,
     }
+# ———————————————————————————————— SEMANTIC KUYRUĞU ————————————————————————————
+def is_semantic_enqueued(call_id: str) -> bool:
+    return rds.sismember(_SEMANTIC_ENQUEUED_SET, call_id)
+
+def mark_semantic_enqueued(call_id: str) -> None:
+    rds.sadd(_SEMANTIC_ENQUEUED_SET, call_id)
+    rds.rpush(_SEMANTIC_JOBS_KEY, call_id)
+
+def dequeue_semantic(call_id: str) -> None:
+    rds.srem(_SEMANTIC_ENQUEUED_SET, call_id)

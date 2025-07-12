@@ -205,4 +205,26 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    
+
+  # 12) semantic_async_worker servisi
+  semantic_async_worker:
+    build:
+      context: ./services/executor_api
+      dockerfile: Dockerfile.semantic_worker
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QDRANT_HOST=${QDRANT_HOST}
+      - QDRANT_PORT=${QDRANT_PORT} 
+      - QDRANT_COLLECTION_DIR=/qdrant_storage
+      - SNAPSHOT_BACKUP_DIR=/snapshots
+    depends_on:
+      - redis
+      - executor_api
+    volumes:
+      - /home/sercan/Desktop/qdrant/storage/collections:/qdrant_storage
+      - /home/sercan/Desktop/MikroSalesIQProject/Backend/qdrant_snapshots:/snapshots

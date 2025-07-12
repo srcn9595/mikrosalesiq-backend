@@ -3,3 +3,4 @@ redis
 motor
 hf_transfer
 python-jose[cryptography]
+qdrant-client

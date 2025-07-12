@@ -10,3 +10,5 @@ cleaned_output/
 recordings/
 docker/environment.yml
 Helper/Scripts/.env
+qdrant_snapshots/
+qdrant/
