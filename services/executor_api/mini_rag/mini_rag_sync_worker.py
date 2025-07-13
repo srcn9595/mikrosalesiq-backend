@@ -15,6 +15,8 @@ from mini_rag.mini_rag_utils import (
     aggregate_audio_features
 )
 from mongo_utils import save_mini_rag_summary
+from queue_utils import is_customer_embedding_enqueued, mark_customer_embedding_enqueued
+from clean_transcript.clean_utils import generate_cleaned_transcript_sync
 
 # ──────────────── ENV & LOGGING ────────────────
 load_dotenv()
@@ -37,32 +39,69 @@ langfuse = Langfuse(
     host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
 )
 
+def try_enqueue_customer_embedding(customer_num: str):
+    doc = audio_jobs.find_one({"customer_num": customer_num}, {
+        "customer_profiles_rag.embedding_created_at": 1
+    })
+
+    if doc and doc.get("customer_profiles_rag", {}).get("embedding_created_at"):
+        log.info(f"[SKIP] {customer_num} zaten vektör embedding yapılmış.")
+        return
+
+    if is_customer_embedding_enqueued(customer_num):
+        log.info(f"[SKIP] {customer_num} zaten kuyruğa alınmış.")
+        return
+
+    mark_customer_embedding_enqueued(customer_num)
+    log.info(f"[✅ ENQUEUED] {customer_num} → customer_embedding_jobs kuyruğuna alındı.")
 
 def generate_mini_rag_output(customer_num: str, notification_id: str = None) -> dict:
     log.info(f"⏱ Mini-RAG senkron başlatıldı: {customer_num}")
 
     doc = audio_jobs.find_one({"customer_num": customer_num})
     if not doc:
-        raise ValueError(f"{customer_num} için kayıt bulunamadı.")
+        raise Exception(f"{customer_num} için kayıt bulunamadı.")
 
-    cleaned_transcripts = [
-        {
-            "call_id": c.get("call_id"),
-            "call_date": c.get("call_date"),
-            "agent_email":  c.get("agent_email"),
-            "transcript": c.get("cleaned_transcript")
-        }
-        for c in doc.get("calls", [])
-        if c.get("cleaned_transcript") and c["cleaned_transcript"].strip()
-    ]
+    cleaned_transcripts = []
+    for call in doc.get("calls", []):
+        call_id = call.get("call_id")
+        call_date = call.get("call_date")
+        agent_email = call.get("agent_email")
+
+        if call.get("cleaned_transcript") and call["cleaned_transcript"].strip():
+            cleaned_transcripts.append({
+                "call_id": call_id,
+                "call_date": call_date,
+                "agent_email": agent_email,
+                "transcript": call["cleaned_transcript"]
+            })
+        elif call.get("transcript") and call["transcript"].strip():
+            log.info(f"🧹 {call_id} için senkron temizlik başlatıldı.")
+            cleaned = generate_cleaned_transcript_sync(
+                call_id=call_id,
+                transcript=call.get("transcript", ""),
+                call_date=call_date,
+                audio_features=call.get("audio_features", {})
+            )
+            if cleaned:
+                cleaned_transcripts.append({
+                    "call_id": call_id,
+                    "call_date": call_date,
+                    "agent_email": agent_email,
+                    "transcript": cleaned
+                })
+            else:
+                raise Exception(f"{call_id} → transcript var ama temizlenemedi.")
+        else:
+            raise Exception(f"{call_id} → transcript yok, temizlenemez → kuyruğa alınmalı.")
 
     if not cleaned_transcripts:
-        raise ValueError(f"{customer_num} için temizlenmiş transcript bulunamadı.")
+        raise Exception(f"{customer_num} için temizlenmiş transcript üretilemedi.")
 
     merged_transcript = merge_transcripts(cleaned_transcripts)
     audio_features = aggregate_audio_features(doc.get("calls", []))
     log.info(f"{audio_features}")
-    payload     = build_mini_rag_payload(cleaned_transcripts, audio_features=audio_features)
+    payload = build_mini_rag_payload(cleaned_transcripts, audio_features=audio_features)
     messages = payload["messages"]
     confidence = payload["confidence"]
     token_count = payload["token_count"]
@@ -80,7 +119,6 @@ def generate_mini_rag_output(customer_num: str, notification_id: str = None) -> 
             span.update(output={"error": str(e)})
             raise e
 
-    # Mongo’ya yaz
     save_mini_rag_summary(
         customer_num=customer_num,
         summary_json=parsed,
@@ -89,16 +127,16 @@ def generate_mini_rag_output(customer_num: str, notification_id: str = None) -> 
         token_count=token_count,
         audio_features=audio_features
     )
+
+    try_enqueue_customer_embedding(customer_num)
     rds.srem(_MINI_RAG_ENQUEUED_SET, customer_num)
     log.info("SET’ten silindi: %s", customer_num)
     log.info(f"✅ Mini-RAG senkron tamamlandı: {customer_num}")
 
-    # --- Notification güncelle ---
-    log.info(f"MINI_RAG_SYNC_WORKER Notification ID: {notification_id}")
     if notification_id:
         try:
             update_notification_status(
-                mongo=db,  # mongo client (ör: pymongo database instance)
+                mongo=db,
                 notification_id=notification_id,
                 status="done",
                 result=parsed

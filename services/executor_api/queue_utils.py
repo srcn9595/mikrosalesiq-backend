@@ -22,7 +22,8 @@ _CLEAN_ENQUEUED_SET             = "clean_enqueued_set"
 _FAILED_JOBS_KEY                = "failed_jobs"
 _SEMANTIC_JOBS_KEY              = "semantic_jobs"
 _SEMANTIC_ENQUEUED_SET          = "semantic_enqueued_set"
-
+CUSTOMER_EMBEDDING_QUEUE = "customer_embedding_jobs"
+CUSTOMER_EMBEDDING_SET   = "customer_embedding_enqueued_set"
 
 
 # ────────────────────── ortak yardımcılar ──────────────────────
@@ -316,3 +317,14 @@ def mark_semantic_enqueued(call_id: str) -> None:
 
 def dequeue_semantic(call_id: str) -> None:
     rds.srem(_SEMANTIC_ENQUEUED_SET, call_id)
+
+# ———————————————————————————————— CUSTOMER EMBEDDING KUYRUĞU ————————————————————————————
+def is_customer_embedding_enqueued(customer_num: str) -> bool:
+    return rds.sismember(CUSTOMER_EMBEDDING_SET, customer_num)
+
+def mark_customer_embedding_enqueued(customer_num: str):
+    rds.rpush(CUSTOMER_EMBEDDING_QUEUE, customer_num)
+    rds.sadd(CUSTOMER_EMBEDDING_SET, customer_num)
+
+def dequeue_customer_embedding(customer_num: str):
+    rds.srem(CUSTOMER_EMBEDDING_SET, customer_num)

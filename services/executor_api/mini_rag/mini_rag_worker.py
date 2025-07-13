@@ -24,7 +24,7 @@ from shared_lib.notification_utils import (
     update_job_in_notification,
     finalize_notification_if_ready
 )
-
+from queue_utils import is_customer_embedding_enqueued, mark_customer_embedding_enqueued
 load_dotenv()
 
 # ─────────────── ENV ───────────────
@@ -56,6 +56,23 @@ logging.basicConfig(
 log = logging.getLogger("mini_rag_worker")
 
 # ─────────────── Helpers ───────────────
+def try_enqueue_customer_embedding(customer_num: str):
+    doc = audio_jobs.find_one({"customer_num": customer_num}, {
+        "customer_profiles_rag.embedding_created_at": 1
+    })
+
+    if doc and doc.get("customer_profiles_rag", {}).get("embedding_created_at"):
+        log.info(f"[SKIP] {customer_num} zaten vektör embedding yapılmış.")
+        return
+
+    if is_customer_embedding_enqueued(customer_num):
+        log.info(f"[SKIP] {customer_num} zaten kuyruğa alınmış.")
+        return
+
+    mark_customer_embedding_enqueued(customer_num)
+    log.info(f"[✅ ENQUEUED] {customer_num} → customer_embedding_jobs kuyruğuna alındı.")
+
+
 def get_cleaned_transcripts_ordered(customer_num: str) -> List[Dict[str, Any]]:
     doc = audio_jobs.find_one({"customer_num": customer_num})
     if not doc:
@@ -183,6 +200,8 @@ def run() -> None:
             token_count       = token_count,
             audio_features    = audio_feats
         )
+        # ✅ Customer embedding kuyruğuna al
+        try_enqueue_customer_embedding(customer_num)
 
         # Kuyruk & SET’ten çıkar
         rds.srem(_MINI_RAG_ENQUEUED_SET, customer_num)

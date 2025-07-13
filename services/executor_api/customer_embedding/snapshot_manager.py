@@ -13,12 +13,12 @@ MAX_SNAPSHOTS = 5
 # Ortam değişkenlerinden alınan yollar
 QDRANT_COLLECTION_DIR = "/qdrant_storage"
 SNAPSHOT_BACKUP_DIR   = "/snapshots"
-SNAPSHOT_STATE_FILE = Path(SNAPSHOT_BACKUP_DIR) / "snapshot_state_semantic.json"
+SNAPSHOT_STATE_FILE = Path(SNAPSHOT_BACKUP_DIR) / "snapshot_state_customer.json"
 
 
-def get_total_semantic_count(mongo_db):
+def get_total_customer_count(mongo_db):
     """Semantic embedding oluşturulmuş çağrı sayısını verir"""
-    return mongo_db["semantic_calls"].count_documents({"embedding_created_at": {"$exists": True}})
+    return mongo_db["customer_profiles_rag"].count_documents({"embedding_created_at": {"$exists": True}})
 
 
 

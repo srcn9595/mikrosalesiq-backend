@@ -33,25 +33,31 @@ def sync_mini_rag_summary_handler(
             except Exception as e:
                 log.warning("clean fail %s: %s", c["call_id"], e)
 
-    # Temizlik sonrası özet üretilebilir mi?
+    # Temizlik sonrası kontrol
     calls_doc = audio_coll.find_one(
         {"customer_num": cnum},
         {"calls.call_id": 1, "calls.cleaned_transcript": 1}
     )["calls"]
-
     missing_callids = [c["call_id"] for c in calls_doc if not c.get("cleaned_transcript")]
 
+    # ✅ Eğer hiç eksik yoksa doğrudan senkron üret
+    if not missing_callids:
+        try:
+            result = generate_mini_rag_output(cnum, notification_id=notification_id)
+            return {"name": "get_mini_rag_summary", "output": result}
+        except Exception as e:
+            log.warning("Senkron mini_rag başarısız: %s", e)
+            # Senkron üretilemezse kuyruğa at
 
-    # Sadece eksik varsa notification açıyoruz!
+    # ⛓ Geriye kalan durumda (eksik varsa veya hata olduysa) kuyruğa at
     if missing_callids:
-        dl_info = queue_utils.enqueue_downloads(missing_callids, notification_id=notification_id,mongo=audio_coll.database)
+        dl_info = queue_utils.enqueue_downloads(missing_callids, notification_id=notification_id, mongo=audio_coll.database)
         log.info("Eksik %s çağrı download kuyruğuna alındı: %s", cnum, dl_info)
 
-    # Her durumda mini_rag kuyruğuna notification_id ile ekle (None olabilir, sorun değil)
-    q = queue_utils.enqueue_mini_rag(cnum, notification_id=notification_id,mongo=audio_coll.database)
+    q = queue_utils.enqueue_mini_rag(cnum, notification_id=notification_id, mongo=audio_coll.database)
 
     if q["already_enqueued"]:
-       msg = (
+        msg = (
             f"{cnum} için işlem zaten kuyruğa alınmış. "
             f"Şu anki sıranız: {q['position']}/{q['total_pending']}. "
             f"İşlem tamamlandığında bildirim alacaksınız."
@@ -61,4 +67,6 @@ def sync_mini_rag_summary_handler(
             f"Analiz kuyruğa alındı. Şu anki sıranız: {q['position']}/{q['total_pending']}. "
             f"İşlem tamamlandığında bildirim alacaksınız."
         )
+
     return {"name": "get_mini_rag_summary", "output": {"message": msg}}
+

@@ -1,0 +1,10 @@
+# Dockerfile.customer_embedding_worker
+FROM mikrosalesiq-base
+
+WORKDIR /app
+COPY . /app/
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app:/app/shared_lib
+
+CMD ["python", "-m", "customer_embedding.customer_async_worker"]
