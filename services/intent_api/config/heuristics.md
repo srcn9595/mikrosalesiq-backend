@@ -65,8 +65,6 @@
 | “transkript”, “metin”, “yazıya dök” | `cleaned_transcript` | `audio_jobs.calls.cleaned_transcript`; yoksa kuyruğa alınır. |
 | “ses kaydı”, “wav”, “mp3” | `file_path` | Ses dosyasının S3 anahtarı / URL’si → `audio_jobs.calls.file_path`. |
 | “süre”, “kaç saniye”, “kaç dk” | duration | Toplam konuşma süresi (audio_jobs.calls.duration). |
-| “agent puanı”, “temsilci skoru” | `agent_score` | Analytics servisinden temsilci performans puanı. |
-| “özet”, “analiz”, “değerlendirme”, “öneri” | `call_insights` | Satış-içgörü (özet + profil + puanlama + öneriler). |
 | **“kaç”, “toplam”, “ortalama”, “en uzun”, “kaç farklı”**| **`get_call_metrics`**| Toplam/ortalama süre, çağrı sayısı, farklı kişi sayısı vb. özet istatistikleri döner.|
 | “kim”, “kimle”, “kiminle” (+agent) | `contact_num` | Agent merkezli sorguda müşteri numarası (Inbound → `caller_id`, Outbound → `called_num`). |
 | “paket”, “ürün”, “product” | `product_lookup` | Satın alınan paket / modül → `audio_jobs.product_lookup`. |
@@ -83,6 +81,13 @@
 | “genel ruh hali”, “duygu durumu”, “sentiment” | `sentiment` | `mini_rag.audio_analysis.sentiment`. |
 | “duygu yorumu”, “ses analizi yorumu”, “yorumlar” | `audio_analysis_commentary` | `mini_rag.audio_analysis.audio_analysis_commentary`. |
 | “birleşik metin”, “merged transcript” | `merged_transcript` | `mini_rag.merged_transcript`; tüm çağrıların tek metni. |
+| “genel özet”, “toplam değerlendirme”, “müşteri özeti” | `summary` | `get_advanced_insight` çıktısıdır; müşteri seviyesinde genel analiz sunar. |
+| “öneri”, “ne yapmalıyız”, “ne önerirsin”, “aksiyon”, “takip planı” | `recommendations` | `get_advanced_insight` çıktısıdır; stratejik tavsiye ve aksiyon listesi döner. |
+| “temsilci eksikleri”, “iletişim hataları”, “süreç sorunu”, “problemli davranış” | `agent_patterns` | `get_advanced_insight` çıktısıdır; temsilcilerde gözlemlenen yaygın hataları döner. |
+| “müşteri segmenti”, “zor müşteri”, “kolay müşteri”, “segment analizi” | `segments` | `get_advanced_insight` çıktısıdır; müşteri türlerini ve segmentleri döner. |
+| “yaygın sorunlar”, “müşteri şikayetleri”, “itirazlar”, “engeller” | `common_issues` | `get_advanced_insight` çıktısıdır; müşterilerin en sık karşılaştığı sorunları listeler. |
+| “not”, “ek bilgi”, “özel durum”, “önemli detay” | `note` | `get_advanced_insight` çıktısıdır; analiz sonunda opsiyonel açıklama sunar. |
+
 
 
 > Model tabloda eşleşme bulamazsa **varsayılan** olarak “transkript” (`cleaned_transcript`) alanını getirir.
@@ -92,7 +97,7 @@
 ## 2.1 · Heuristik Kural: `$project` İçine `call_id` yalnızca **call-level** sorgular için eklenmelidir
 
 - **Kural:**  
-  - Eğer intent `call_insights`, `cleaned_transcript`, `file_path`, `duration`, `call_date`, `agent_name`, `agent_email` gibi **call-level** alanlardaysa,  
+  - Eğer intent  `cleaned_transcript`, `file_path`, `duration`, `call_date`, `agent_name`, `agent_email` gibi **call-level** alanlardaysa,  
     `$project` aşamasına mutlaka `call_id` eklenmelidir.  
   - Eğer intent `opportunity_stage`, `lead_source`, `contact_email`, `contact_name`, `product_lookup`, `close_date`, `lost_reason`, `created_date` gibi **customer-level** alanlardaysa,  
     `call_id` **gereksizdir** ve `$project` aşamasına **eklenmemelidir**.
@@ -110,7 +115,29 @@
 
 ---
 
-## 2.1.1 · Intent Seviyeleri
+## 2.1.1 · Insight Analizleri için Özel Kural (`get_advanced_insight`)
+
+- `get_advanced_insight` intent'i hem **tekil müşteri analizi** (örneğin `"0509... müşteri için ne önerirsin?"`)  
+  hem de **toplu analiz** (örneğin `"Son 1 ayda neden kaybettik?"`) için kullanılabilir.
+
+- Bu intent her zaman `customer-level` analiz yapar, çünkü `mini_rag`, `recommendations`, `summary`, `customer_profile` gibi alanlar üzerinden çalışır.
+
+- Insight analizlerinde hiçbir şekilde `call-level` alanlar (`call_id`, `duration`, `calls.call_date` gibi) kullanılmamalıdır.  
+  `insight_engine` yalnızca `customer-level` veriyle çalışır ve çağrı seviyesindeki alanlar teknik olarak anlamsızdır.
+
+
+### Kurallar:
+
+- `$project` aşamasına **`call_id` eklenmemelidir**.
+- Pipeline içinde:
+  - Eğer `$match.customer_num` varsa → bireysel müşteri analizi yapılır.
+  - Eğer `top_k`, `threshold` gibi alanlar varsa → benzer müşteri segmentlerine göre toplu analiz yapılır.
+- Her iki senaryoda da **call_id gereksiz ve potansiyel olarak hatalıdır.**
+
+> 🎯 Bu nedenle: `get_advanced_insight` intent'i **mutlaka customer-level** olarak değerlendirilmelidir.
+
+---
+## 2.1.2 · Intent Seviyeleri
 
 Aşağıdaki tablo, her intent'in hangi seviyede (`call-level` mi `customer-level` mi) değerlendirilmesi gerektiğini gösterir.
 
@@ -122,7 +149,6 @@ Aşağıdaki tablo, her intent'in hangi seviyede (`call-level` mi `customer-leve
 | `call_date`            | call-level     | Çağrının yapıldığı tarih |
 | `agent_email`          | call-level     | Görüşmeye katılan temsilcinin e-posta adresi |
 | `agent_name`           | call-level     | Temsilcinin adı |
-| `call_insights`        | call-level     | Satış içgörüleri – yalnızca belirli çağrılarda çalışır |
 | `contact_email`        | customer-level | Müşterinin iletişim e-postası |
 | `contact_name`         | customer-level | Müşteri adı |
 | `customer_num`         | customer-level | Müşteri telefon numarası (05... ile başlayan) |
@@ -144,81 +170,22 @@ Aşağıdaki tablo, her intent'in hangi seviyede (`call-level` mi `customer-leve
 | `get_next_steps`              | customer-level | Müşteri ve temsilci için önerilen takip adımları |
 | `get_audio_analysis_commentary` | customer-level | Ses analizine dayalı açıklayıcı yorumlar |
 | `get_sentiment_analysis`      | customer-level | Genel duygu durumu ve duygu geçişi |
+| `insight_customer_loss_reasons`   | customer-level | Kapanmayan fırsatlardaki ortak kayıp nedenleri ve müşteri segmentleri |
+| `insight_success_patterns`        | customer-level | Kazanılan fırsatlarda tekrar eden başarı stratejileri ve temsilci davranışları |
+| `insight_customer_tactics`        | customer-level | Belirli bir müşteri için ihtiyaçlar, hassasiyetler ve ikna önerileri |
+| `insight_risk_profiles`           | customer-level | Yüksek risk taşıyan müşteri tipolojisi ve ortak özellikleri |
+| `insight_customer_recovery`       | customer-level | Kapanmayan fırsatların geri kazanımı için önerilen aksiyonlar |
+| `insight_agent_communication`     | customer-level | Temsilci iletişim tarzlarının müşteriler üzerindeki olumlu/olumsuz etkileri |
+
 
 
 
 > Model, intent’e göre `$project` aşamasında `call_id` ekleyip eklemeyeceğini bu tabloya göre belirlemelidir.
 
 
-## 2.2 · `call_insights` İçin Ekstra Heuristikler
-
-- Eğer kullanıcı sorgusunda şu kelimeler geçiyorsa, `customer_profile` mutlaka oluşturulmalıdır:  
-  **“müşteri profili”**, **“personality”**, **“kişilik”**, **“ihtiyaç”**, **“segment”**, **“rolü”**, **“müşteri tipi”**
-
-- Kullanıcı sorgusunda şu ifadeler varsa, `sales_scores` objesi dolu olarak oluşturulmalıdır:  
-  **“puanlama”**, **“skor”**, **“performans”**, **“değerlendirme”**, **“başarı”**
-
-- Kullanıcı şu ifadelerden birini kullanmışsa, `recommendations` en az **2 maddelik** öneri içermelidir:  
-  **“öneri”**, **“gelişim”**, **“iyileştirme”**, **“improvement”**, **“dikkat etmesi gereken”**, **“tavsiye”**
-
-- `call_id` ve `summary` her zaman zorunludur. Diğer alanlar kullanıcı ihtiyacına göre eklenmelidir.
-
-- `customer_num` alanı:
-  - Eğer çağrı `audio_jobs` koleksiyonu içinde bulunuyorsa,
-  - İlgili belge içinden `customer_num` alanı alınarak mutlaka `insight` nesnesine yazılmalıdır.
-
-- `customer_profile` alanı oluşturulacaksa:
-  - `personality_type`, `role` ve `sector` **zorunlu**.
-  - `needs` dizisi varsa **en az 1** ihtiyaç içermelidir.
-
 ---
 
-## 2.3 · `write_call_insights` için Özel Kurallar
-
-- Kullanıcı hem **özet**, hem **profil**, hem **puanlama**, hem de **öneri** istiyorsa → `call_insights` adımı tetiklenmelidir.
-
-- `call_insights` yalnızca **tek bir çağrıya** (tek `call_id`) özel çalışır.  
-  Toplu çağrılar için çalışmaz. `call_id` mutlaka açıkça belirtilmiş olmalıdır.
-
-- `call_insights` çıktısı oluşturulduğunda, bu veri **gösterim amacıyla değil**,  
-  doğrudan `write_call_insights` fonksiyonu ile **MongoDB’ye kaydetmek** içindir.
-
-- `write_call_insights` çıktısı `insight` adında bir JSON nesnesi almalıdır.  
-  Örnek çağrı:
-
-```json
-{
-  "name": "write_call_insights",
-  "arguments": {
-    "insight": {
-      "call_id": "ast26-1707285918.1374698",
-      "customer_num": "05011345074",
-      "summary": "Müşteri temsilcisi ürün özelliklerini net şekilde aktardı. Müşteri büyük oranda ikna oldu.",
-      "customer_profile": {
-        "personality_type": "D (Dominant)",
-        "role": "Karar verici",
-        "sector": "Hizmet",
-        "needs": ["Kolay fatura gönderimi", "Hızlı destek"]
-      },
-      "sales_scores": {
-        "discovery": 4.2,
-        "communication": 3.8,
-        "objection": 3.5,
-        "features": 4.5,
-        "closing": 3.9
-      },
-      "recommendations": [
-        "Temsilci, müşteri ihtiyaçlarını daha açık analiz etmeli",
-        "İtirazlara daha güçlü yanıtlar hazırlanmalı"
-      ]
-    }
-  }
-}
-
-
----
-
-## 2.4 · Çoklu Intent İşleme
+## 2.2 · Çoklu Intent İşleme
 
 Kullanıcı aynı cümlede birden fazla istek belirtirse:
 
@@ -229,9 +196,16 @@ Kullanıcı aynı cümlede birden fazla istek belirtirse:
    ```json
    [{"name":"report_problem","arguments":{"reason":"Çelişkili istek"}}]
 
+- Eğer bir müşteri için hem `call-level` hem `customer-level` veriler isteniyorsa (örneğin: "Tüm transcriptleri ve fırsat aşamasını getir"):
+
+  1. İlk tool_call, `call-level` (örneğin `get_transcripts_by_customer_num`) olarak tanımlanmalı.
+  2. İkinci tool_call, `customer-level` (örneğin `get_opportunity_info`) olarak ayrı bir adım olarak gelmeli.
+  3. Her tool_call çıktısı ayrı işlenir; model bu ayrımı doğru yapmalıdır.
+
+
 ---
 
-## 2.5 · Karşılaştırmalı Sıralama (en çok / en az)
+## 2.3 · Karşılaştırmalı Sıralama (en çok / en az)
 
 Kullanıcı aynı sorguda **“en çok”**, **“en az”**, **“maksimum”**, **“minimum”**, **“fazla”**, **“az”**, **“yüksek”**, **“düşük”** gibi karşılaştırmalı ifadeler belirtmişse:
 
@@ -252,6 +226,11 @@ Kullanıcı aynı sorguda **“en çok”**, **“en az”**, **“maksimum”**
 ## 3 · Problem Tespiti
 - Çözümlenemeyen belirsiz tarih → `problem_reason = "Belirsiz tarih ifadesi"`  
 - Eksik ya da çelişkili filtre  → uygun açıklama  
+
+- Eğer hem `customer_num` hem `top_k` verilmişse → sistem müşteri embedding'i üzerinden benzer müşteri analizi yapar.
+- Bu kullanım geçerlidir.
+
+
 
 ---
 
@@ -331,3 +310,204 @@ Kullanıcının sorgusunda aşağıdaki ifadeler geçiyorsa:
     }
   }
 ]
+## 2.7 · Hybrid Vector-Mongo Tool Kullanımı: `vector_customer`
+
+### 2.7.1 · Müşteri segmentasyonuna göre opportunity_stage filtresi
+
+
+- Eğer kullanıcı ifadesinde:
+    - "müşteriler neden kaybediliyor"
+    - "müşteri kaybı"
+    - "neden dönüşmüyor"
+    - "dönüşüm olmuyor"
+    - "satışı kaçırdık"
+    - "lead lost"
+    - "Closed Lost"
+    - "Lead Lost"
+    - "kaybedilmiş"
+    - "satın almamış"
+  gibi ifadeler geçiyorsa:
+
+→ pipeline içine:
+```json
+[
+  {
+    "$match": {
+      "opportunity_stage": { "$in": ["Closed Lost", "Lead Lost"] }
+    }
+  }
+]
+
+Kullanıcı sorgusu aşağıdaki türdeyse:
+
+- “genel analiz”, “müşteri segmenti”, “yaygın sorunlar”, “ortak problemler”, “müşteri profili eğilimi”, “benzer müşteri davranışı”, “analiz özeti”, “müşteri davranış eğilimi”
+- Ayrıca → vektör benzerliği + Mongo veri çekimi bir arada isteniyorsa  
+→ `vector_customer` tool'u kullanılmalıdır.
+
+### 🔀 İki Senaryo Desteklenir:
+
+#### 1. **Query → Qdrant → Mongo + LLM (default davranış)**
+
+```json
+{
+  "name": "vector_customer",
+  "arguments": {
+    "query": "müşteriler neden dönüşmüyor?",
+    "top_k": 5,
+    "threshold": 0.75
+  }
+}
+- Qdrant üzerinden benzer customer_num alınır.
+
+- Mongo pipeline'a customer_num.$in olarak eklenir.
+
+- Özet + öneri + profil alanları LLM ile analiz edilir.
+
+> 📌 Not: Eğer `query`, `top_k`, `threshold` birlikte varsa → bu sorgu vektör destekli insight analizidir.  
+> Eğer sadece `customer_num` varsa → tekil müşteri analizi yapılır.  
+> Eğer ikisi birden aynı anda varsa → `problem_reason = "Tekil ve toplu analiz parametreleri çakışıyor"` hatası döndürülmelidir.
+
+
+## 2.7.2 · Dönüşüm Potansiyeli – `conversion_probability` Filtresi
+
+Aşağıdaki ifadeler geçiyorsa, pipeline'a şu filtre eklenmelidir:
+
+- "yüksek dönüşüm"
+- "yüksek olasılık"
+- "yüksek potansiyel"
+- "dönüşüm olasılığı"
+- "convert olasılığı"
+
+Eklenecek pipeline:
+
+```json
+[
+  {
+    "$match": {
+      "mini_rag.conversion_probability": { "$gte": 0.60 }
+    }
+  }
+]
+
+
+#### 2. **Query + Pipeline → doğrudan Mongo filtreli vektör analiz**
+
+```json
+{
+  "name": "vector_customer",
+  "arguments": {
+    "query": "satın alan müşterilerin ortak özellikleri nedir?",
+    "top_k": 5,
+    "threshold": 0.75,
+    "collection": "audio_jobs",
+    "pipeline": [
+      { "$match": { "opportunity_stage": { "$eq": "Closed Won" } } },
+      { "$project": {
+        "customer_num": 1,
+        "account_name": 1,
+        "mini_rag.summary": 1,
+        "mini_rag.recommendations": 1,
+        "mini_rag.customer_profile": 1
+      }}
+    ]
+  }
+}
+
+- Bu yapı, yalnızca belirli filtrelerle (ör. sadece kazanan müşteriler) analiz yapılmak istenirse kullanılır.
+
+## 2.8 · Lead Lost Sayımı → Her müşteri sadece bir kez sayılmalı
+
+- Kullanıcı aşağıdaki kalıpları kullanıyorsa:
+
+  - “en çok hangi nedenle lead kaybedilmiş”
+  - “lead lost nedeni”
+  - “kaybedilme nedeni”
+  - “en çok neden kaybedilmiş”
+  - “müşteri neden kaybedildi”
+  - “lead kaybı nedeni”
+
+- Intent şu şekilde ayarlanmalıdır:
+
+  ```json
+  "intent": "get_lost_reason_count"
+  ```
+
+- Kullanıcı sorusunda tarih bilgisi varsa ve `calls.call_date` ifadesi geçse bile:
+
+  - `calls.call_date` yerine **`close_date`** alanı kullanılmalıdır.
+  - Çünkü müşteri kayıpları `calls` içinde değil, root-level’dadır.
+
+- Mongo pipeline aşağıdaki gibi olmalıdır:
+
+  ```json
+[
+  {
+    "$match": {
+      "close_date": {
+        "$gte": "2025-06-12T00:00:00",
+        "$lt":  "2025-06-13T00:00:00"
+      }
+    }
+  },
+  {
+    "$match": {
+      "$or": [
+        { "lost_reason": { "$exists": true, "$ne": null } },
+        { "lost_reason_detail": { "$exists": true, "$ne": null } }
+      ]
+    }
+  },
+  {
+    "$group": {
+      "_id": {
+        "reason": { "$ifNull": [ "$lost_reason", "$lost_reason_detail" ] }
+      },
+      "count": { "$sum": 1 }
+    }
+  },
+  { "$sort": { "count": -1 } },
+  { "$limit": 1 },
+  {
+    "$project": {
+      "_id": 0,
+      "lost_reason": "$_id.reason",
+      "count": 1
+    }
+  }
+]
+
+  ```
+
+- Notlar:
+
+  - Bu yapı sayesinde her müşteri yalnızca bir kez sayılır.
+  - Aynı müşterinin birden fazla çağrısı olsa bile tekrar sayım yapılmaz.
+  - "$date" ifadesi kullanılmaz, doğrudan ISO string "2025-06-12T00:00:00" formatı tercih edilir.
+
+---
+
+🧠 Model İçin Uyarılar:
+- call_id kesinlikle eklenmemelidir.
+
+- Sadece query alanı varsa fallback çalışabilir (son 100 müşteri).
+
+- pipeline belirtilmişse, sadece belirtilen filtre üzerinden veri alınır.
+
+- collection sadece pipeline kullanılıyorsa gereklidir, fallback durumunda otomatik atlanır.
+
+## 2.9 · Insight & Vector Tool Çakışma Kuralları
+
+Insight (`insight_engine`) veya müşteri benzerliği (`vector_customer`) kullanılan tool_call'larda aşağıdaki çakışmalara dikkat edilmelidir:
+
+- Eğer aynı anda hem `customer_num` (tekil müşteri) hem `top_k` / `threshold` (çoklu analiz) verilmişse:
+  → Plan reddedilmeli ve şu hata dönülmelidir:
+  ```json
+  [{ "name": "report_problem", "arguments": { "reason": "Tekil ve toplu analiz parametreleri çakışıyor" }}]
+  ```
+
+- Eğer sadece `query` varsa → **genel analiz yapılır**, Qdrant üzerinden benzer müşteriler getirilir.
+- Eğer sadece `customer_num` varsa → **tek müşteri için özel analiz** yapılır.
+- Eğer sadece `pipeline` varsa → direkt Mongo filtresiyle çalışılır (genelde `vector_customer` için).
+- `collection` alanı yalnızca pipeline'lı sorgularda zorunludur.
+
+> Insight analizlerinde `call_id` hiçbir şekilde kullanılmamalıdır.

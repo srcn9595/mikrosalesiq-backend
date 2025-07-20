@@ -23,7 +23,7 @@ from pyannote.core import Annotation
 from kvkk_guard import mask_sensitive_info
 from audio_features_worker import process_call          # senkron
 from queue_utils import (
-    dequeue_download, dequeue_call_insights, dequeue_mini_rag,
+    dequeue_download, dequeue_mini_rag,
     mark_clean_enqueued, mark_failed
 )
 from shared_lib.notification_utils import (
@@ -259,7 +259,6 @@ def main() -> None:
             # ---------- Kuyruk & durum güncellemeleri ----------
             if success or retries >= MAX_RETRIES:
                 dequeue_download(call_id)
-                dequeue_call_insights(call_id)
                 dequeue_mini_rag(customer)
 
             if success:

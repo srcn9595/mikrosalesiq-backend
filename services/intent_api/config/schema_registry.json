@@ -121,44 +121,5 @@
   }
     },
     "required": ["customer_num", "calls"]
-  },
-
-
-  "call_insights": {
-    "type": "object",
-    "description": "Tek bir çağrıya ait satış-analiz çıktısı",
-    "properties": {
-      "call_id":      { "type": "string" },
-      "customer_num": { "type": "string" },
-      "summary":      { "type": "string" },
-
-      "customer_profile": {
-        "type": "object",
-        "properties": {
-          "personality_type": { "type": "string" },
-          "role":             { "type": "string" },
-          "sector":           { "type": "string" },
-          "needs":            { "type": "array", "items": { "type": "string" } }
-        },
-        "required": ["personality_type", "role", "sector"]
-      },
-
-      "sales_scores": {
-        "type": "object",
-        "properties": {
-          "discovery":     { "type": "number" },
-          "communication": { "type": "number" },
-          "objection":     { "type": "number" },
-          "features":      { "type": "number" },
-          "closing":       { "type": "number" }
-        }
-      },
-
-      "recommendations": {
-        "type": "array",
-        "items": { "type": "string" }
-      }
-    },
-    "required": ["call_id", "summary"]
   }
 }

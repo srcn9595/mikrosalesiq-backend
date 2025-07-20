@@ -94,4 +94,4 @@ def reset_customer_analysis(customer_num: str):
 
 # Örnek çalıştırma
 if __name__ == "__main__":
-    reset_customer_analysis("05415571737")
+    reset_customer_analysis("05011345074")

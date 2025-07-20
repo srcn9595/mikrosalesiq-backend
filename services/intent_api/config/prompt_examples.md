@@ -4,13 +4,6 @@
 #     {name, arguments, intent} alanları bire bir manifest ile eşleşir.
 # ────────────────────────────────────────────────────────────────
 
-# 1 — CALL ANALYSIS (tek call_id → call_insights)
-- user: "ast26-1707285918.1374698 çağrısının satış performansını analiz et"
-  tool_call:
-    name: call_insights
-    intent: get_call_analysis
-    arguments:
-      call_id: "ast26-1707285918.1374698"
 
 # 2 — CUSTOMER OVERVIEW (tek müşteri → mini-rag)
 - user: "05011345074 müşterisinin genel analizini ver"
@@ -96,20 +89,10 @@
 # 8 — MULTI-INTENT: transcript + overview
 - user: "05320122474 numarasının tüm transcriptlerini ver, sonra genel özetini çıkart"
   tool_call:
-    name: mongo_aggregate
-    intent: get_transcripts_by_customer_num
-    arguments:
-      collection: audio_jobs
-      pipeline:
-        - $unwind: "$calls"
-        - $match: { customer_num: "05320122474" }
-        - $project: { _id: 0, call_id: "$calls.call_id", transcript: "$calls.cleaned_transcript" }
-- tool_call:
     name: get_mini_rag_summary
     intent: get_customer_overview
     arguments:
       customer_num: "05320122474"
-
 # 9 — ENQUEUE MISSING TRANSCRIPTS (executor kararına bırak)
 - user: "ast26-XYZ çağrısının transkripti yoksa sıraya al"
   tool_call:
@@ -267,35 +250,29 @@
         - $match: { customer_num: "05067203599" }
         - $project: { _id: 0, customer_num: 1, contact_name: 1, contact_email: 1 }
 
-# 21 — MULTI-INTENT: transcript + fırsat aşaması + ürün
-- user: "Kartal Market’in tüm transcriptlerini ver, fırsat aşamasını ve paketini de ekle"
+# 21 — MULTI-FIELD: transcript + fırsat aşaması + ürün
+- user: "05324343294 müşterisinin tüm transkriptleriyle birlikte fırsat aşamasını ve paketini getir"
   tool_call:
     name: mongo_aggregate
-    intent: get_transcripts_by_customer_num
+    intent: get_transcripts_and_opportunity
     arguments:
       collection: audio_jobs
       pipeline:
         - $unwind: "$calls"
-        - $match: { account_name: "Kartal Market" }
+        - $match: { customer_num: "05324343294" }
         - $project:
             _id: 0
             call_id: "$calls.call_id"
             transcript: "$calls.cleaned_transcript"
-  - tool_call:
-      name: mongo_aggregate
-      intent: get_opportunity_info
-      arguments:
-        collection: audio_jobs
-        pipeline:
-          - $match: { account_name: "Kartal Market" }
-          - $project: { _id: 0, opportunity_stage: 1, product_lookup: 1 }
+            opportunity_stage: 1
+            product_lookup: 1
 
 
-# 22 — LAST CALL + OPPORTUNITY INFO  (🆕 yeni örnek)
+# 22 — LAST CALL + OPPORTUNITY INFO
 - user: "En son konuştuğumuz müşterinin fırsat aşaması, lead source ve e-postası?"
   tool_call:
     name: mongo_aggregate
-    intent: get_last_call
+    intent: get_last_call_and_opportunity_info
     arguments:
       collection: audio_jobs
       pipeline:
@@ -305,23 +282,14 @@
         - $project:
             _id: 0
             customer_num: "$customer_num"
-            call_id:      "$calls.call_id"
-            call_date:    "$calls.call_date"
-  - tool_call:
-      name: mongo_aggregate
-      intent: get_opportunity_info
-      arguments:
-        collection: audio_jobs
-        pipeline:
-          - $match: { customer_num: "{prev.customer_num}" }  # gateway doldurur
-          - $project:
-              _id: 0
-              customer_num: 1
-              opportunity_stage: 1
-              lead_source: 1
-              contact_email: 1
-              contact_name: 1
-              close_date: 1
+            call_id: "$calls.call_id"
+            call_date: "$calls.call_date"
+            opportunity_stage: 1
+            lead_source: 1
+            contact_email: 1
+            contact_name: 1
+            close_date: 1
+
               
 # 23 — CALL METRICS (toplam çağrı adedi)
 - user: "05011345074 müşterisiyle toplam kaç çağrı yapılmış?"
@@ -337,29 +305,32 @@
         - $project:{ _id: 0, total_calls: 1 }
 
 # 24 — EN ÇOK LEAD LOST NEDENİ (belirli bir günde)
-- user: "12 haziran 2025 de en çok hangi lead lost almış?"
+- user: "12 Haziran 2025'te en çok hangi nedenle lead kaybedilmiş?"
   tool_call:
     name: mongo_aggregate  
     intent: get_lost_reason_count  
     arguments:  
       collection: audio_jobs  
       pipeline:
-        - $match: { "calls.call_date": { $gte: "2025-06-12", $lte: "2025-06-12" } }
-        - $unwind: "$calls"
-        - $match:  
-            $or:  
-              - { "lost_reason": { $exists: true } }  
-              - { "lost_reason_detail": { $exists: true } }
-        - $group:  
-            _id:  
-              reason: { $ifNull: [ "$lost_reason", "$lost_reason_detail" ] }  
+        - $match:
+            close_date:
+              $gte: "2025-06-12T00:00:00"
+              $lt:  "2025-06-13T00:00:00"
+        - $match:
+            $or:
+              - { lost_reason: { $exists: true, $ne: null } }
+              - { lost_reason_detail: { $exists: true, $ne: null } }
+        - $group:
+            _id:
+              reason: { $ifNull: [ "$lost_reason", "$lost_reason_detail" ] }
             count: { $sum: 1 }
         - $sort: { count: -1 }
         - $limit: 1
-        - $project:  
-            _id: 0  
-            lost_reason: "$_id.reason"  
+        - $project:
+            _id: 0
+            lost_reason: "$_id.reason"
             count: 1
+
 
 # 25 — GÖRÜŞÜLEN TEMSİLCİ SAYISI (kaç farklı kişiyle konuşmuş)
 - user: "Bu müşteri kaç farklı temsilciyle görüşmüş?"
@@ -388,7 +359,10 @@
       collection: audio_jobs  
       pipeline:
         - $unwind: "$calls"
-        - $match: { "calls.call_date": { $gte: "2025-06-12", $lte: "2025-06-12" } }
+        - $match:
+            calls.call_date:
+              $gte: "2025-06-12T00:00:00"
+              $lt:  "2025-06-13T00:00:00"
         - $sort: { "calls.duration": -1 }
         - $limit: 1
         - $project:
@@ -406,7 +380,10 @@
       collection: audio_jobs  
       pipeline:
         - $unwind: "$calls"
-        - $match: { "calls.call_date": { $gte: "2025-06-15", $lte: "2025-06-15" } }
+        - $match:
+            calls.call_date:
+              $gte: "2025-06-15T00:00:00"
+              $lt:  "2025-06-16T00:00:00"
         - $group:
             _id: "$customer_num"
             total_calls: { $sum: 1 }
@@ -417,6 +394,7 @@
             customer_num: "$_id"
             total_calls: 1
 
+
 # 28 — ORTALAMA GÖRÜŞME SÜRESİ EN YÜKSEK MÜŞTERİ (belirli tarihte)
 - user: "12 Haziran 2025’de ortalama görüşme süresi en yüksek müşteri kim?"
   tool_call:
@@ -426,7 +404,10 @@
       collection: audio_jobs  
       pipeline:
         - $unwind: "$calls"
-        - $match: { "calls.call_date": { $gte: "2025-06-12", $lte: "2025-06-12" } }
+        - $match:
+            calls.call_date:
+              $gte: "2025-06-12T00:00:00"
+              $lt:  "2025-06-13T00:00:00"
         - $group:
             _id: "$customer_num"
             avg_duration: { $avg: "$calls.duration" }
@@ -615,7 +596,6 @@
             sentiment: "$mini_rag.audio_analysis.sentiment"
             emotion_shift_score: "$mini_rag.audio_analysis.emotion_shift_score"
 
-# 38 — CLOSED LOST ancak CONVERSION PROBABILITY yüksek olan müşteriler
 - user: "10 Haziran 2024’ten sonra lead’i kaybedilmiş ama dönüşüm olasılığı en yüksek 5 müşteriyi dönüşüm oranı, çağrı tarihi ve temsilcisiyle birlikte getir."
   tool_call:
     name: mongo_aggregate
@@ -629,17 +609,21 @@
         - $unwind: "$calls"
         - $match:
             calls.call_date: { $gte: "2024-06-10" }
+        - $sort:
+            calls.call_date: -1
         - $group:
             _id: "$customer_num"
             conversion_probability: { $first: "$mini_rag.conversion_probability" }
             agent_email: { $first: "$calls.agent_email" }
             call_date: { $first: "$calls.call_date" }
+            account_name: { $first: "$account_name" }
         - $sort:
             conversion_probability: -1
         - $limit: 5
         - $project:
             _id: 0
             customer_num: "$_id"
+            account_name: 1
             conversion_probability: 1
             agent_email: 1
             call_date: 1
@@ -771,3 +755,299 @@
             agent_email: "$_id"
             positive_call_count: 1
             topics: 1
+
+# 45 — MÜŞTERİ TİPİNE GÖRE ORTAK DÖNÜŞÜM PROBLEMİ ANALİZİ
+- user: "Benzer müşterilerde dönüşüm problemlerinin ortak nedenleri ne olabilir?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "müşteriler neden dönüşmüyor?"
+      top_k: 10
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+
+# 46 — SATIŞA DÖNÜŞMEYENLERDE ORTAK ENGELLER
+- user: "Satışa dönüşemeyen müşterilerde tekrar eden problemler neler?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "neden satışa dönüşemiyorlar?"
+      top_k: 10
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+
+# 47 — KAYBEDİLEN MÜŞTERİ PROFİL ANALİZİ
+- user: "Kaybettiğimiz müşterilerin profilleri nasıldı?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "müşteri kaybı neden yaşanıyor?"
+      top_k: 15
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: { $in: ["Closed Lost", "Lead Lost"] }
+
+# 48 — TEMSİLCİ PERFORMANSI ZAYIF NOKTALAR
+- user: "Satışı kaçırdığımız müşterilerde temsilciler hangi konularda yetersiz kalmış?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "temsilci eksikleri"
+      top_k: 15
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+
+# 49 — SATIN ALAN MÜŞTERİLERDE ORTAK PROFİL
+- user: "Satın alan müşterilerde ortak profil nedir?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "dönüşmüş müşteriler nasıl?"
+      top_k: 7
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: "Closed Won"
+
+# 50 — EN VERİMLİ MÜŞTERİ SEGMENTLERİ
+- user: "En çok satış yaptığımız segmentler neler?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "en verimli segment"
+      top_k: 10
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: "Closed Won"
+
+# 51 — DÖNÜŞÜM POTANSİYELİ YÜKSEK MÜŞTERİ PROFİLİ
+- user: "Dönüşme potansiyeli yüksek müşteriler hangi özellikleri taşıyor?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "yüksek dönüşüm olasılığı"
+      top_k: 20
+      threshold: 0.35
+      pipeline:
+        - $match:
+            mini_rag.conversion_probability: { $gte: 0.60 }
+
+# 52 — MÜŞTERİ KAYIPLARININ ORTAK SEBEPLERİ
+- user: "Müşteriler neden kaybediliyor olabilir?"
+  tool_call:
+    name: vector_customer
+    intent: get_customer_patterns
+    arguments:
+      query: "müşteriler neden kaybediliyor olabilir?"
+      top_k: 15
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: { $in: ["Closed Lost", "Lead Lost"] }
+
+# 53 — SON 1 AYDAKİ MÜŞTERİ KAYIPLARI
+- user: "Son 1 ayda neden bu kadar müşteri kaybettik?"
+  tool_call:
+    name: insight_engine
+    intent: get_lost_reason_analysis
+    arguments:
+      query: "kapanmayan fırsatlarda tekrar eden temsilci ya da süreç hataları"
+      top_k: 20
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+            close_date: { $gte: "2025-06-18T00:00:00" }
+        - $project:
+            _id: 0
+            customer_num: 1
+            lost_reason: 1
+            lost_reason_detail: 1
+            opportunity_owner: 1
+            close_date: 1
+            mini_rag.summary: 1
+            mini_rag.common_issues: 1
+            mini_rag.recommendations: 1
+            mini_rag.risk_score: 1
+            mini_rag.next_steps: 1
+
+# 54 — DÜŞÜK DÖNÜŞÜMLÜ MÜŞTERİ SEGMENTLERİ
+- user: "İkna etmekte zorlandığımız müşteri segmentleri neler?"
+  tool_call:
+    name: insight_engine
+    intent: get_low_conversion_segments
+    arguments:
+      query: "düşük dönüşüm oranına sahip müşteri profilleri ve ortak itirazlar"
+      top_k: 15
+      threshold: 0.40
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+        - $project:
+            _id: 0
+            customer_num: 1
+            mini_rag.customer_profile.sector: 1
+            mini_rag.customer_profile.personality_type: 1
+            mini_rag.customer_profile.needs: 1
+            mini_rag.conversion_probability: 1
+            mini_rag.common_issues: 1
+            mini_rag.recommendations: 1
+
+# 55 — SES TONU & SATIŞ BAŞARISI
+- user: "Ses analizlerine göre başarılı temsilciler nasıl bir tonlama kullanıyor?"
+  tool_call:
+    name: insight_engine
+    intent: get_successful_audio_patterns
+    arguments:
+      query: "ses tonu ve ifade şekli ile satış başarısı ilişkisi"
+      top_k: 10
+      threshold: 0.25
+      pipeline:
+        - $match:
+            opportunity_stage: "Closed Won"
+        - $unwind: "$calls"
+        - $project:
+            _id: 0
+            call_id: "$calls.call_id"
+            agent_email: "$calls.agent_email"
+            audio_features: "$calls.audio_features"
+            audio_analysis_commentary: "$calls.audio_analysis_commentary"
+
+# 56 — MÜŞTERİYE YAKLAŞIM STRATEJİSİ
+- user: "05067203599 numaralı müşteriyle görüşeceğim, geçmişe göre nasıl yaklaşmalıyım?"
+  tool_call:
+    name: insight_engine
+    intent: get_customer_specific_tactics
+    arguments:
+      query: "müşteri ihtiyaçları, hassasiyetleri ve ikna için taktikler"
+      pipeline:
+        - $match:
+            customer_num: "05067203599"
+        - $project:
+            _id: 0
+            customer_num: 1
+            mini_rag.summary: 1
+            mini_rag.customer_profile: 1
+            mini_rag.recommendations: 1
+            mini_rag.next_steps: 1
+            mini_rag.risk_score: 1
+            mini_rag.conversion_probability: 1
+
+# 57 — BAŞARILI SATIŞLARDA ORTAK STRATEJİLER
+- user: "Haziran ayında kazanılan müşterilerde en etkili satış taktiği ne olmuş?"
+  tool_call:
+    name: insight_engine
+    intent: get_successful_sales_strategies
+    arguments:
+      query: "başarılı satışlarda tekrar eden ikna stratejileri"
+      top_k: 15
+      threshold: 0.35
+      pipeline:
+        - $match:
+            opportunity_stage: "Closed Won"
+            close_date: { $gte: "2025-06-01T00:00:00", $lt: "2025-07-01T00:00:00" }
+        - $project:
+            _id: 0
+            customer_num: 1
+            mini_rag.summary: 1
+            mini_rag.recommendations: 1
+            mini_rag.sales_scores: 1
+            mini_rag.segments: 1
+
+# 58 — YÜKSEK RİSKLİ MÜŞTERİ PROFİLLERİ
+- user: "Son zamanlarda en çok risk taşıyan müşteri profili hangisi?"
+  tool_call:
+    name: insight_engine
+    intent: get_high_risk_profiles
+    arguments:
+      query: "yüksek risk skoru taşıyan müşteri tipolojisi"
+      top_k: 10
+      threshold: 0.40
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+        - $project:
+            _id: 0
+            customer_num: 1
+            mini_rag.customer_profile: 1
+            mini_rag.risk_score: 1
+            mini_rag.summary: 1
+            mini_rag.common_issues: 1
+
+# 59 — KAYBEDİLEN FIRSATLARDA GERİ KAZANIM
+- user: "Geçtiğimiz ay kapatamadığımız fırsatları kazanmak için neler yapmalıyız?"
+  tool_call:
+    name: insight_engine
+    intent: get_win_back_tactics
+    arguments:
+      query: "kapanmayan fırsatlarda önerilen taktikler ve geri kazanım önerileri"
+      top_k: 12
+      threshold: 0.30
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+            close_date: { $gte: "2025-06-18T00:00:00" }
+        - $project:
+            _id: 0
+            customer_num: 1
+            lost_reason: 1
+            mini_rag.summary: 1
+            mini_rag.recommendations: 1
+            mini_rag.next_steps: 1
+            mini_rag.risk_score: 1
+
+# 60 — TEMSİLCİ İLETİŞİM TARZI ANALİZİ
+- user: "İletişim tarzımız müşterilerde nasıl bir etki bırakıyor olabilir?"
+  tool_call:
+    name: insight_engine
+    intent: get_communication_style_impact
+    arguments:
+      query: "temsilcilerin iletişim tarzlarının olumlu ve olumsuz etkileri"
+      top_k: 10
+      threshold: 0.30
+      pipeline:
+        - $match:
+            opportunity_stage: { $ne: "Closed Won" }
+        - $unwind: "$calls"
+        - $project:
+            _id: 0
+            call_id: "$calls.call_id"
+            cleaned_transcript: "$calls.cleaned_transcript"
+            audio_features: "$calls.audio_features"
+            audio_analysis_commentary: "$calls.audio_analysis_commentary"
+            mini_rag.sales_scores: 1
+
+# 61 — TEK MÜŞTERİLİ HATA ANALİZİ
+- user: "0509991122 müşteri numaralı kayıpta neyi yanlış yapmış olabiliriz?"
+  tool_call:
+    name: insight_engine
+    intent: get_individual_failure_analysis
+    arguments:
+      query: "müşterinin ikna olmama nedenleri, eksik iletişim ya da öneri eksiklikleri"
+      pipeline:
+        - $match:
+            customer_num: "0509991122"
+        - $project:
+            _id: 0
+            customer_num: 1
+            lost_reason: 1
+            mini_rag.summary: 1
+            mini_rag.recommendations: 1
+            mini_rag.next_steps: 1
+            mini_rag.risk_score: 1
+            mini_rag.common_issues: 1

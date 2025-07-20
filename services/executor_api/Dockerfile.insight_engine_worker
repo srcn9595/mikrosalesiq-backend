@@ -1,0 +1,11 @@
+# Dockerfile.insight_engine_worker
+
+FROM mikrosalesiq-base
+
+WORKDIR /app
+COPY . /app/
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app:/app/shared_lib
+
+CMD ["python", "-m", "insight_engine.insight_async_worker"]

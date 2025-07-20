@@ -21,8 +21,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from handlers.mini_rag_sync_handler import sync_mini_rag_summary_handler
 from handlers.get_call_metrics_handler import get_call_metrics_handler
 from handlers.mini_rag_async_handler import mini_rag_async_handler
-from handlers.call_insights_async_handler import call_insights_async_handler
 from handlers.mongo_aggregate_handler import mongo_aggregate_handler
+from handlers.vector_call_handler import vector_call_handler
+from handlers.vector_customer_handler import vector_customer_handler
+from handlers.insight_engine_handler import insight_engine_handler
 
 from shared_lib.notification_utils import create_notification
 
@@ -107,6 +109,58 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
         log.info(f"Yeni notification yaratıldı: {notification_id}")
 
         requested_tools = {s.get("name") for s in plan}
+        # ───────────── Insight Engine ─────────────
+        insight_engine_steps = [s for s in plan if s.get("name") == "insight_engine"]
+        if insight_engine_steps:
+            results = []
+            for step in insight_engine_steps:
+                args = step.get("arguments", {}).copy()
+                args["intent"] = step.get("intent")
+                args["notification_id"] = notification_id
+                args["mongo"] = db  # 🔑 mevcut bağlantıyı ekle
+                out = await insight_engine_handler(args)
+                results.append(out)
+    
+            # Eğer sonuçlar tamamen boş ya da her biri anlamsız ise error message ile dön
+            if (
+                not results or 
+                all(
+                    not (r and isinstance(r, dict) and "output" in r and isinstance(r["output"], dict)) or (
+                        not r["output"].get("items") and not r["output"].get("message")
+                    )
+                    for r in results
+                )
+            ):
+                log.warning("Insight engine sonuçları boş veya geçersiz!")
+                return {
+                    "results": [{
+                        "name": "insight_engine",
+                        "output": {"message": "Girilen kriterlere uygun kayıt bulunamadı."}
+                    }]
+                }
+    
+            # Buraya düşerse en az bir geçerli output var demek
+            return {"results": results}
+
+
+        # ───────────── Vektör Arama (call-level) ─────────────
+        vector_call_steps = [s for s in plan if s.get("name") == "vector_call"]
+        if vector_call_steps:
+            results = []
+            for step in vector_call_steps:
+                out = await vector_call_handler(step["arguments"])
+                results.append(out)
+            if results:
+                return {"results": results}
+
+        vector_customer_steps = [s for s in plan if s.get("name") == "vector_customer"]
+        if vector_customer_steps:
+            results = []
+            for step in vector_customer_steps:
+                out = await vector_customer_handler(step["arguments"])
+                results.append(out)
+            if results:
+                return {"results": results}    
 
         # ───────────── get_call_metrics (toplam/ortalama/max süre) ─────────────
         metrics_steps = [s for s in plan if s.get("name") == "get_call_metrics"]
@@ -140,18 +194,21 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
 
         
         # ───────────── mongo_aggregate adımı zorunlu ──────────────
+        
+        for step in plan:
+            if step.get("name") == "mongo_aggregate":
+                step.setdefault("arguments", {})
+                step["arguments"]["notification_id"] = notification_id
+
 
         result, docs, missing_call_ids = mongo_aggregate_handler(
-            db, audio_coll, queue_utils, clean_transcript_sync, plan, _fill_templates, _is_call_level, log, bson_safe, requested_tools
+            db, audio_coll, queue_utils, clean_transcript_sync,
+            plan, _fill_templates, _is_call_level,
+            log, bson_safe, requested_tools
         )
-        if result:
-            return result
+        if isinstance(result, dict) and "message" in result and "results" not in result:
+            return JSONResponse(content={"message": result["message"]})
 
-        # ─────────── call_insights kuyruğu ────────────
-        if "call_insights" in requested_tools:
-            result = call_insights_async_handler(db, queue_utils, docs)
-            if result:
-                return result
 
         # ───────────── mini_rag kuyruğu  ─────────────
         if "mini_rag" in requested_tools:
@@ -159,11 +216,6 @@ async def execute_plan(plan: List[Dict[str, Any]] = Body(...)):
             if result:
                 return result
         # ───────────────────────────────────────────────────────────────────
-        # Eksik transcript + analiz istenirken
-        if {"call_insights", "mini_rag"} & requested_tools and missing_call_ids:
-            return {"message": f"{len(missing_call_ids)} çağrının cleaned_transcript "
-                               "verisi eksik. Kuyruğa alındı. "
-                               "Lütfen birkaç dakika sonra tekrar deneyin."}
 
         # Varsayılan dönüş
         return JSONResponse(content={

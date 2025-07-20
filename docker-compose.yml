@@ -251,3 +251,22 @@ services:
     volumes:
       - /home/sercan/Desktop/qdrant/storage/collections:/qdrant_storage
       - /home/sercan/Desktop/MikroSalesIQProject/Backend/qdrant_snapshots:/snapshots
+  
+  # 14) insight_engine_worker servisi
+  insight_engine_worker:
+    build:
+      context: ./services/executor_api
+      dockerfile: Dockerfile.insight_engine_worker
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB=${MONGO_DB}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST}
+      - EXECUTOR_API_URL=${EXECUTOR_API_URL}
+    depends_on:
+      - redis 

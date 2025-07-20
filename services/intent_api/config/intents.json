@@ -48,15 +48,6 @@
     ]
   },
   {
-    "intent": "get_call_analysis",
-    "description": "Tek bir çağrı için özet, profil, puan, öneri (call_insights) üretir",
-    "examples": [
-      "ast26-… çağrısının özetini ve müşteri profilini çıkar",
-      "Bu görüşmeden satış içgörüleri neler?",
-      "Temsilci performansını değerlendir"
-    ]
-  },
-  {
     "intent": "get_customer_overview",
     "description": "Bir müşterinin tüm görüşmeleri üzerinden mini-RAG özet raporu döner",
     "examples": [
@@ -212,6 +203,104 @@
     "Bu müşteri analist mi?",
     "Hangi sektörde çalışıyor?",
     "Profilinde sektör bilgisi var mı?"
+  ]
+},
+{
+  "intent": "get_customer_patterns",
+  "description": "Müşteri bazlı vektörel benzerlik ile özet ve profil alanlarına göre genel analiz (ortak sorunlar, segmentler, öneriler) çıkarır.",
+  "examples": [
+    "Son 10 benzer müşterideki ortak problemleri çıkar",
+    "Sık tekrar eden müşteri ihtiyaçlarını listele",
+    "Benzer müşteri profillerinden hangi segmentler oluşmuş?",
+    "Temsilcilere önerilecek aksiyonları özetle",
+    "Müşteri bazlı yaygın talepler neler?",
+    "Satışa dönüşemeyen müşterilerde tekrar eden problemler neler?",
+    "Kaybettiğimiz müşterilerin profilleri nasıldı?",
+    "Satışı kaçırdığımız müşterilerde temsilciler hangi konularda yetersiz kalmış?",
+    "Satın alan müşterilerde ortak profil nedir?",
+    "En çok satış yaptığımız segmentler neler?",
+    "Dönüşme potansiyeli yüksek müşteriler hangi özellikleri taşıyor?"
+  ]
+},
+{
+  "intent": "get_lost_reason_analysis",
+  "description": "Kapanmayan fırsatlarda tekrar eden temsilci hataları, süreç sorunları ve geri kazanım önerilerini çıkarır.",
+  "examples": [
+    "Son 1 ayda neden bu kadar müşteri kaybettik?",
+    "Kapatamadığımız fırsatlardaki tekrar eden hataları bul",
+    "Son zamanlardaki kayıp nedenlerini analiz et"
+  ]
+},
+{
+  "intent": "get_low_conversion_segments",
+  "description": "Düşük dönüşüm oranına sahip müşteri segmentlerini, bu segmentlerin ortak özelliklerini ve itirazlarını analiz eder.",
+  "examples": [
+    "İkna etmekte zorlandığımız müşteri segmentleri neler?",
+    "Düşük dönüşüm gösteren müşteri profilleri kim?",
+    "En çok hangi müşteri tipinde kaybediyoruz?"
+  ]
+},
+{
+  "intent": "get_successful_audio_patterns",
+  "description": "Ses tonu, konuşma tarzı ve ifade şekilleri ile başarılı satışlar arasındaki ilişkileri analiz eder.",
+  "examples": [
+    "Ses analizlerine göre başarılı temsilciler nasıl bir tonlama kullanıyor?",
+    "Satışa dönüşen konuşmalarda hangi ses özellikleri baskın?",
+    "İyi temsilciler nasıl konuşuyor?"
+  ]
+},
+{
+  "intent": "get_customer_specific_tactics",
+  "description": "Belirli bir müşterinin geçmiş konuşmalarına göre ihtiyaçları, hassasiyetleri ve ikna için önerilen stratejileri döner.",
+  "examples": [
+    "05067203599 numaralı müşteriyle görüşeceğim, geçmişe göre nasıl yaklaşmalıyım?",
+    "Bu müşteriyi ikna etmek için ne önerirsin?",
+    "Geçmiş konuşmalara göre bu müşteri neye dikkat ediyor?"
+  ]
+},
+{
+  "intent": "get_successful_sales_strategies",
+  "description": "Satışı kapanan fırsatlar arasında tekrar eden etkili satış stratejilerini analiz eder.",
+  "examples": [
+    "Haziran ayında kazanılan müşterilerde en etkili satış taktiği ne olmuş?",
+    "Başarılı satışlarda öne çıkan stratejiler neler?",
+    "Kazanan fırsatlarda hangi ikna teknikleri işe yaramış?"
+  ]
+},
+{
+  "intent": "get_high_risk_profiles",
+  "description": "Yüksek risk skoru taşıyan müşteri profillerini analiz eder ve yaygın risk işaretlerini tanımlar.",
+  "examples": [
+    "Son zamanlarda en çok risk taşıyan müşteri profili hangisi?",
+    "Yüksek riskli müşteri tipolojileri neler?",
+    "Kaybetme riski yüksek olan müşteriler nasıl özellikler taşıyor?"
+  ]
+},
+{
+  "intent": "get_win_back_tactics",
+  "description": "Kapanmayan fırsatları yeniden kazanmak için önerilen taktikleri ve iletişim stratejilerini listeler.",
+  "examples": [
+    "Geçtiğimiz ay kapatamadığımız fırsatları kazanmak için neler yapmalıyız?",
+    "Kapanan ama dönüşmeyen müşterileri nasıl kazanabiliriz?",
+    "Geri kazanım için ne öneriyorsun?"
+  ]
+},
+{
+  "intent": "get_communication_style_impact",
+  "description": "Temsilcilerin iletişim tarzının müşteri üzerindeki olumlu ve olumsuz etkilerini analiz eder.",
+  "examples": [
+    "İletişim tarzımız müşterilerde nasıl bir etki bırakıyor olabilir?",
+    "Temsilcilerin davranışı dönüşüme nasıl etki ediyor?",
+    "Konuşma tarzımız müşterileri etkiliyor mu?"
+  ]
+},
+{
+  "intent": "get_individual_failure_analysis",
+  "description": "Tek bir müşteri özelinde kayıp nedenlerini, eksik iletişim noktalarını ve önerilen adımları analiz eder.",
+  "examples": [
+    "0509991122 müşteri numaralı kayıpta neyi yanlış yapmış olabiliriz?",
+    "Bu müşteri neden ikna olmamış olabilir?",
+    "Bu özel kayıpta neyi farklı yapmalıydık?"
   ]
 }
 

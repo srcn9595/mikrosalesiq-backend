@@ -38,8 +38,6 @@ Aşağıdaki örnek–çıktı eşleşmeleri senin format referansındır; bunla
     enqueue_transcription_job(call_ids[])
     – Transcript eksikse iş kuyruğuna at.
 
-    write_call_insights(insight)
-    – Belirli bir çağrıya ait satış-insight çıktısını MongoDB’ye kaydeder (summary, profil, skor, öneriler).
  
 
 ============================================================
@@ -75,6 +73,11 @@ Aşağıdaki örnek–çıktı eşleşmeleri senin format referansındır; bunla
     Belirsiz / çelişkili istek varsa tek bir tool call ile:
 
     [{"name":"report_problem","arguments":{"reason":"..."}}]
+
+    Eğer sadece 'query' verilmişse ve 'pipeline' yoksa:
+        – vector_customer tool'unda fallback devreye girebilir (son 100 müşteri).
+
+    pipeline verilmişse fallback kullanılmaz
 
 ============================================================
 📑 7 | BUGÜNÜN TARİHİ

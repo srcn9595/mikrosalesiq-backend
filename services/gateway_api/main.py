@@ -13,7 +13,6 @@ logging.basicConfig(level=logging.INFO)
 from shared_lib.mongo_chat_utils import insert_message, create_chat_session_if_needed
 from shared_lib.jwt_utils import verify_token
 
-
 def ensure_path(url: str, suffix: str) -> str:
     parts = up.urlparse(url)
     return url.rstrip("/") + suffix if not parts.path.strip("/") else url.rstrip("/")
@@ -27,7 +26,6 @@ EXECUTOR_API_URL = ensure_path(
     "/execute"
 )
 
-# MongoDB setup
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB  = os.getenv("MONGO_DB", "miksalesiq")
 mongo     = AsyncIOMotorClient(MONGO_URI)[MONGO_DB]
@@ -38,11 +36,12 @@ app = FastAPI()
 ROOT_DIR   = pathlib.Path(__file__).parent
 CONFIG_DIR = ROOT_DIR / "config"
 
-if not CONFIG_DIR.exists():          # kökteki /app/config var mı?
+if not CONFIG_DIR.exists():
     CONFIG_DIR = pathlib.Path(__file__).resolve().parent / "config"
 
 with open(CONFIG_DIR / "allowed_tools.json", encoding="utf-8") as f:
     ALLOWED_TOOLS = set(json.load(f))
+
 
 @app.post("/api/analyze")
 async def analyze(request: Request):
@@ -54,19 +53,26 @@ async def analyze(request: Request):
     query = payload.get("query", "")
     if not isinstance(query, str) or not query.strip():
         raise HTTPException(400, "Geçersiz query parametresi.")
-    
 
     user_id = user_info.get("sub") or "unknown"
     username = user_info.get("preferred_username", "")
     email = user_info.get("email", "")
     session_id = payload.get("session_id")
-    fcm_token = payload.get("fcm_token") 
-    user_roles = user_info.get("roles",[])
+    fcm_token = payload.get("fcm_token")
+    user_roles = user_info.get("roles", [])
     logging.info(user_roles)
-    
+
     session_id = create_chat_session_if_needed(user_id, session_id)
 
-    chat_id = insert_message(session_id, "user", {"type":"text", "content": query},user_id=user_id,username=username,email=email,fcm_token=fcm_token)
+    chat_id = insert_message(
+        session_id,
+        "user",
+        {"type": "text", "content": query},
+        user_id=user_id,
+        username=username,
+        email=email,
+        fcm_token=fcm_token,
+    )
 
     # 1️⃣ Workflow kaydı oluştur
     workflow = {
@@ -75,76 +81,96 @@ async def analyze(request: Request):
         "status": "planned",
         "results": None,
         "error": None,
-        "timestamps": {"planned_at": datetime.utcnow()}
+        "timestamps": {"planned_at": datetime.utcnow()},
     }
     wf_res = await mongo.analysis_workflows.insert_one(workflow)
-    wf_id  = wf_res.inserted_id
+    wf_id = wf_res.inserted_id
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         # 2️⃣ Intent API’den plan al
-        try:            
+        try:
             intent_resp = await client.post(INTENT_API_URL, json={"query": query})
             intent_resp.raise_for_status()
             intent_json = intent_resp.json()
             plan = intent_json.get("plan", [])
         except Exception:
-            return {"type":"text","content":"Lütfen mesajınızı doğru formatta gönderiniz.Hata olduğunu düşünüyorsanız geri bildirim veriniz.","session_id":session_id}
-        
+            return {
+                "type": "text",
+                "content": "Lütfen mesajınızı doğru formatta gönderiniz. Hata olduğunu düşünüyorsanız geri bildirim veriniz.",
+                "session_id": session_id,
+            }
+
         if (
-            not isinstance(plan, list) or 
-            not plan or 
-            "error" in intent_json
-            ):
+            not isinstance(plan, list)
+            or not plan
+            or "error" in intent_json
+        ):
             err_msg = intent_json.get("error") or "İşleminiz için bir plan oluşturulamadı. Lütfen farklı bir mesaj deneyin."
             return {
                 "type": "text",
                 "content": err_msg,
-                "session_id": session_id
+                "session_id": session_id,
             }
+
         for step in plan:
             if "arguments" in step:
                 step["arguments"]["chat_message_id"] = str(chat_id)
 
         await mongo.analysis_workflows.update_one(
-            {"_id": wf_id},
-            {"$set": {"plan": plan}}
+            {"_id": wf_id}, {"$set": {"plan": plan}}
         )
-        from shared_lib.rbac.rbac_utilts import get_user_permissions,is_intent_allowed,are_tools_allowed
+
+        from shared_lib.rbac.rbac_utilts import (
+            get_user_permissions,
+            is_intent_allowed,
+            are_tools_allowed,
+        )
+
         intent_name = intent_json.get("intent", "")
         user_perms = get_user_permissions(user_roles)
         log.info(user_perms)
         allowed_intents = user_perms["intents"]
         allowed_tools = user_perms["tools"]
-        
+
         if not is_intent_allowed(intent_name, allowed_intents):
-             return {
+            return {
                 "type": "text",
                 "content": "Bu işlemi gerçekleştirme yetkiniz bulunmamaktadır. Hata olduğunu düşünüyorsanız lütfen geri bildirim veriniz.",
-                 "session_id": session_id
-         }
+                "session_id": session_id,
+            }
 
         if not are_tools_allowed(plan, allowed_tools):
             return {
-                 "type": "text",
-                 "content": "Plan içindeki bazı adımlara erişiminiz yok. Lütfen yetkilerinizle uyumlu bir sorgu girin.",
-                 "session_id": session_id
-         }
-        
-        
+                "type": "text",
+                "content": "Plan içindeki bazı adımlara erişiminiz yok. Lütfen yetkilerinizle uyumlu bir sorgu girin.",
+                "session_id": session_id,
+            }
+
         # 3️⃣ meta_about_creator special case
         if any(step.get("name") == "meta_about_creator" for step in plan):
             await mongo.analysis_workflows.update_one(
                 {"_id": wf_id},
-                {"$set": {
-                    "status": "succeeded",
-                    "results": [{"name": "meta_about_creator"}],
-                    "timestamps.completed_at": datetime.utcnow()
-                }}
+                {
+                    "$set": {
+                        "status": "succeeded",
+                        "results": [{"name": "meta_about_creator"}],
+                        "timestamps.completed_at": datetime.utcnow(),
+                    }
+                },
             )
-            insert_message(session_id, "bot", {"type":"text","content":"Ben, MikroSalesIQ satış zekası sisteminin bir parçasıyım.\n"
-                    "Mikro grup tarafından geliştirildim ve yapay zeka destekli çağrı analizi yaparak\n"
-                    "müşteri temsilcilerine ve yöneticilere akıllı satış öngörüleri sunarım.\n"
-                    "Altyapımda OpenAI, FastAPI, MongoDB, Redis, Pinecone gibi teknolojiler kullanılmaktadır."})
+            insert_message(
+                session_id,
+                "bot",
+                {
+                    "type": "text",
+                    "content": (
+                        "Ben, MikroSalesIQ satış zekası sisteminin bir parçasıyım.\n"
+                        "Mikro grup tarafından geliştirildim ve yapay zeka destekli çağrı analizi yaparak\n"
+                        "müşteri temsilcilerine ve yöneticilere akıllı satış öngörüleri sunarım.\n"
+                        "Altyapımda OpenAI, FastAPI, MongoDB, Redis, Pinecone gibi teknolojiler kullanılmaktadır."
+                    ),
+                },
+            )
             return {
                 "type": "text",
                 "content": (
@@ -153,7 +179,7 @@ async def analyze(request: Request):
                     "müşteri temsilcilerine ve yöneticilere akıllı satış öngörüleri sunarım.\n"
                     "Altyapımda OpenAI, FastAPI, MongoDB, Redis, Pinecone gibi teknolojiler kullanılmaktadır."
                 ),
-                "session_id": session_id
+                "session_id": session_id,
             }
 
         # 4️⃣ Desteklenmeyen plan → fail
@@ -161,23 +187,32 @@ async def analyze(request: Request):
             err = "Üzgünüz, isteğiniz işlenemedi. Lütfen parametrelerinizi kontrol ederek tekrar deneyin veya destek ekibine başvurun."
             await mongo.analysis_workflows.update_one(
                 {"_id": wf_id},
-                {"$set": {
-                    "status": "failed",
-                    "error": err,
-                    "timestamps.completed_at": datetime.utcnow()
-                }}
+                {
+                    "$set": {
+                        "status": "failed",
+                        "error": err,
+                        "timestamps.completed_at": datetime.utcnow(),
+                    }
+                },
             )
             insert_message(session_id, "bot", {"type": "text", "content": err})
-            return {"type": "text", "content": err,"session_id": session_id}
+            return {
+                "type": "text",
+                "content": err,
+                "session_id": session_id,
+            }
 
         # 5️⃣ Executor’a gönder ve executing yap
         await mongo.analysis_workflows.update_one(
             {"_id": wf_id},
-            {"$set": {
-                "status": "executing",
-                "timestamps.executed_at": datetime.utcnow()
-            }}
+            {
+                "$set": {
+                    "status": "executing",
+                    "timestamps.executed_at": datetime.utcnow(),
+                }
+            },
         )
+
         exec_resp = await client.post(EXECUTOR_API_URL, json=plan)
         try:
             exec_resp.raise_for_status()
@@ -185,195 +220,260 @@ async def analyze(request: Request):
             error_text = exec_resp.text
             await mongo.analysis_workflows.update_one(
                 {"_id": wf_id},
-                {"$set": {
-                    "status": "failed",
-                    "error": error_text,
-                    "timestamps.completed_at": datetime.utcnow()
-                }}
+                {
+                    "$set": {
+                        "status": "failed",
+                        "error": error_text,
+                        "timestamps.completed_at": datetime.utcnow(),
+                    }
+                },
             )
             insert_message(session_id, "bot", {"type": "text", "content": "İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin."})
             return {
                 "type": "text",
                 "content": "İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin.",
-                "session_id": session_id
+                "session_id": session_id,
             }
 
-        # 6️⃣ Executor yanıtını al, NoneType’e karşı koru
         executor_json = exec_resp.json() or {}
         if not isinstance(executor_json, dict):
             raise HTTPException(500, "Beklenmeyen formatta yanıt alındı.")
 
-       # 7️⃣ get_mini_rag_summary varsa: özet(ler)i işle
-        if any(s["name"] == "get_mini_rag_summary" for s in plan):
+        # --- STEP PARSING ---
+        # Tek tek, adıma göre net return zinciri
+        # Her step adımı için ayrı branch, out scope hatası sıfır
 
-            # 7-a) Kuyruğa alındı mesajı geldiyse
+        # get_mini_rag_summary varsa:
+        if any(s["name"] == "get_mini_rag_summary" for s in plan):
+            # Kuyruğa alındı mesajı geldiyse
             if "message" in executor_json:
                 msg = executor_json["message"]
                 await mongo.analysis_workflows.update_one(
                     {"_id": wf_id},
-                    {"$set": {
-                        "status": "succeeded",
-                        "results": [{"name": "get_mini_rag_summary",
-                                     "output": {"message": msg}}],
-                        "timestamps.completed_at": datetime.utcnow()
-                    }}
+                    {
+                        "$set": {
+                            "status": "succeeded",
+                            "results": [
+                                {"name": "get_mini_rag_summary", "output": {"message": msg}}
+                            ],
+                            "timestamps.completed_at": datetime.utcnow(),
+                        }
+                    },
                 )
                 insert_message(session_id, "bot", {"type": "text", "content": msg})
                 return {"type": "text", "content": msg, "session_id": session_id}
 
-            # 7-b) Bir veya birden çok summary döndü
+            # Bir veya birden çok summary döndü
             summaries = [
                 step["output"]
                 for step in executor_json.get("results", [])
                 if step.get("name") == "get_mini_rag_summary"
             ]
-
-            if not summaries:          # emniyet
+            if not summaries:
                 raise HTTPException(500, "Özet beklenirken sonuç alınamadı.")
 
-            # Mongo’ya tüm özetleri kaydet
             await mongo.analysis_workflows.update_one(
                 {"_id": wf_id},
-                {"$set": {
-                    "status": "succeeded",
-                    "results": [
-                        {"name": "get_mini_rag_summary", "output": o}
-                        for o in summaries
-                    ],
-                    "timestamps.completed_at": datetime.utcnow()
-                }}
+                {
+                    "$set": {
+                        "status": "succeeded",
+                        "results": [
+                            {"name": "get_mini_rag_summary", "output": o}
+                            for o in summaries
+                        ],
+                        "timestamps.completed_at": datetime.utcnow(),
+                    }
+                },
             )
 
-            # Frontend’e her özet için bir “item” döndür
             items = [
                 {
                     "customer_profile": o.get("customer_profile", {}),
-                    "summary":          o.get("summary", ""),
-                    "recommendations":  o.get("recommendations", []),
-                    "audio_analysis":   o.get("audio_analysis", {}),
-                    "sales_scores":     o.get("sales_scores", {}),
-                    "merged_transcript":o.get("merged_transcript", ""),
-                    "next_steps":      o.get("next_steps", []),
+                    "summary": o.get("summary", ""),
+                    "recommendations": o.get("recommendations", []),
+                    "audio_analysis": o.get("audio_analysis", {}),
+                    "sales_scores": o.get("sales_scores", {}),
+                    "merged_transcript": o.get("merged_transcript", ""),
+                    "next_steps": o.get("next_steps", []),
                     "conversion_probability": o.get("conversion_probability", None),
-                    "risk_score":           o.get("risk_score", None),
+                    "risk_score": o.get("risk_score", None),
                 }
                 for o in summaries
             ]
             insert_message(session_id, "bot", {"type": "json", "content": {"items": items}})
             return {"type": "json", "content": {"items": items}, "session_id": session_id}
 
-        # 8️⃣ enqueue_mini_rag adımıysa direkt mesaj dön
+        # enqueue_mini_rag adımıysa direkt mesaj dön
         if any(s["name"] == "enqueue_mini_rag" for s in plan):
             message = executor_json.get("message", "")
             await mongo.analysis_workflows.update_one(
                 {"_id": wf_id},
-                {"$set": {
-                    "status": "succeeded",
-                    "results": [{"name":"enqueue_mini_rag","output":message}],
-                    "timestamps.completed_at": datetime.utcnow()
-                }}
+                {
+                    "$set": {
+                        "status": "succeeded",
+                        "results": [{"name": "enqueue_mini_rag", "output": message}],
+                        "timestamps.completed_at": datetime.utcnow(),
+                    }
+                },
             )
             insert_message(session_id, "bot", {"type": "text", "content": message})
-            return {"type":"text", "content": message,session_id: session_id}
+            return {"type": "text", "content": message, "session_id": session_id}
 
-        # 9️⃣ Genel executor “message” varsa
+        # Genel executor “message” varsa
         if "message" in executor_json:
             msg = executor_json["message"]
             await mongo.analysis_workflows.update_one(
                 {"_id": wf_id},
-                {"$set": {
-                    "status": "succeeded",
-                    "results": [{"name":"message","output":msg}],
-                    "timestamps.completed_at": datetime.utcnow()
-                }}
+                {
+                    "$set": {
+                        "status": "succeeded",
+                        "results": [{"name": "message", "output": msg}],
+                        "timestamps.completed_at": datetime.utcnow(),
+                    }
+                },
             )
             insert_message(session_id, "bot", {"type": "text", "content": msg})
-            return {"type":"text", "content": msg, "session_id": session_id}
+            return {"type": "text", "content": msg, "session_id": session_id}
 
-        # 🔟 mongo_aggregate sonuçlarını parse et ve dök
+        # mongo_aggregate
         all_items: list[dict] = []
-
+        log.info(f"EXECUTOR_JSON: {executor_json}")
+        log.info(f"EXECUTOR_JSON['results']: {executor_json.get('results', [])}")
         for step in executor_json.get("results", []):
             if step.get("name") != "mongo_aggregate":
-             continue
-
+                continue
             raw = step.get("output", []) or []
             BLACKLIST = {
-                 "_id", "file_path", "raw_transcript", "downloaded_at",
-                 "transcribed_at", "cleaned_at", "call_key", "token_count"
-             }
-
+                "_id", "file_path", "raw_transcript", "downloaded_at",
+                "transcribed_at", "cleaned_at", "call_key", "token_count"
+            }
             for rec in raw:
-                # İstenmeyen alanları at
                 clean = {k: v for k, v in rec.items() if k not in BLACKLIST}
-
-                # call_id garantiye al
                 if "call_id" not in clean and rec.get("call_id"):
                     clean["call_id"] = rec["call_id"]
-
-                # mesaj varsa koru
                 if "message" in rec:
                     clean["message"] = rec["message"]
-
                 all_items.append(clean)
 
-        # En az bir mongo_aggregate sonucu varsa kaydet + dön
         if all_items:
             await mongo.analysis_workflows.update_one(
                 {"_id": wf_id},
-                {"$set": {
-                     "status": "succeeded",
-                     "results": [{"name": "mongo_aggregate", "output": all_items}],
-                     "timestamps.completed_at": datetime.utcnow()
-              }}
+                {
+                    "$set": {
+                        "status": "succeeded",
+                        "results": [{"name": "mongo_aggregate", "output": all_items}],
+                        "timestamps.completed_at": datetime.utcnow(),
+                    }
+                },
             )
             insert_message(session_id, "bot", {"type": "json", "content": {"items": all_items}})
             return {"type": "json", "content": {"items": all_items}, "session_id": session_id}
 
-        # 1️⃣1️⃣ write_call_insights varsa
-        for step in executor_json.get("results", []):
-            if step.get("name") == "write_call_insights":
-                out = step["output"]
-                await mongo.analysis_workflows.update_one(
-                    {"_id": wf_id},
-                    {"$set": {
-                        "status": "succeeded",
-                        "results": [{"name":"write_call_insights","output":out}],
-                        "timestamps.completed_at": datetime.utcnow()
-                    }}
-                )
-                insert_message(session_id, "bot", {"type": "json", "content": out})
-                return {"type":"json", "content": out, "session_id": session_id}
-            
-        # 1️⃣2️⃣ get_call_metrics varsa
+        # get_call_metrics
         for step in executor_json.get("results", []):
             if step.get("name") == "get_call_metrics":
                 out = step.get("output", {})
                 await mongo.analysis_workflows.update_one(
                     {"_id": wf_id},
-                    {"$set": {
-                        "status": "succeeded",
-                        "results": [{"name": "get_call_metrics", "output": out}],
-                        "timestamps.completed_at": datetime.utcnow()
-                    }}
+                    {
+                        "$set": {
+                            "status": "succeeded",
+                            "results": [{"name": "get_call_metrics", "output": out}],
+                            "timestamps.completed_at": datetime.utcnow(),
+                        }
+                    },
                 )
                 insert_message(session_id, "bot", {"type": "json", "content": out})
                 return {"type": "json", "content": out, "session_id": session_id}
 
+        # vector_customer
+        for step in executor_json.get("results", []):
+            if step.get("name") == "vector_customer":
+                out = step.get("output", {})
+                await mongo.analysis_workflows.update_one(
+                    {"_id": wf_id},
+                    {
+                        "$set": {
+                            "status": "succeeded",
+                            "results": [{"name": "vector_customer", "output": out}],
+                            "timestamps.completed_at": datetime.utcnow(),
+                        }
+                    },
+                )
+                insert_message(session_id, "bot", {"type": "json", "content": out})
+                return {"type": "json", "content": out, "session_id": session_id}
+
+        # insight_engine
+        for step in executor_json.get("results", []):
+            if step.get("name") == "insight_engine":
+                out = step.get("output", {})
+                log.info(f"insight_engine bulundu! out={out}, wf_id={wf_id}")
+
+                await mongo.analysis_workflows.update_one(
+                    {"_id": wf_id},
+                    {
+                        "$set": {
+                            "status": "succeeded",
+                            "results": [{"name": "insight_engine", "output": out}],
+                            "timestamps.completed_at": datetime.utcnow(),
+                        }
+                    },
+                )
+                log.info(f"Mongo update_one tamamlandı (wf_id={wf_id})")
+                # YENİ: Tamamen boşsa, farklı contentType dön
+                is_empty = (
+                    isinstance(out, dict)
+                    and "items" in out
+                    and isinstance(out["items"], list)
+                    and len(out["items"]) == 1
+                    and all(
+                        # Bütün ana analiz alanları boş/None/empty
+                        not v or (isinstance(v, (list, dict)) and len(v) == 0)
+                        for k, v in out["items"][0].items()
+                        if k not in ("note", "message")
+                    )
+                )
+                if is_empty:
+                    insert_message(session_id, "bot", {"type": "noinsight", "content": out})
+                    return {
+                        "type": "noinsight",
+                        "content": out,
+                        "session_id": session_id,
+                    }
 
 
-        # 🔺 Hiçbiri çalışmadıysa hata
+                if "items" in out:
+                    log.info("Frontend: type=json dönüyor.")
+                    insert_message(session_id, "bot", {"type": "json", "content": out})
+                    return {
+                        "type": "json",
+                        "content": out,
+                        "session_id": session_id,
+                    }
+                elif "message" in out:
+                    log.info("Frontend: type=text dönüyor.")
+                    insert_message(session_id, "bot", {"type": "text", "content": out["message"]})
+                    return {
+                        "type": "text",
+                        "content": out["message"],
+                        "session_id": session_id,
+                    }
+
+        # Eğer hiçbir adım çalışmadıysa
+        log.warning(f"Hiçbir executor adımı işlenemedi. wf_id={wf_id}")
         await mongo.analysis_workflows.update_one(
             {"_id": wf_id},
-            {"$set": {
-                "status": "failed",
-                "error": "Beklenmeyen executor sonucu",
-                "timestamps.completed_at": datetime.utcnow()
-            }}
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": "Beklenmeyen executor sonucu",
+                    "timestamps.completed_at": datetime.utcnow(),
+                }
+            },
         )
-        insert_message(session_id, "bot", {"type": "text", "content": "İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin."})
+        insert_message(session_id, "bot", {"type": "text", "content": "İlgili veriler bulunamadı."})
         return {
-            "type":"text",
-            "content":"İşleminiz sırasında bir aksaklık yaşandı. Lütfen birkaç dakika sonra tekrar deneyin.",
-            "session_id": session_id
+            "type": "text",
+            "content": "İlgili veriler bulunamadı.",
+            "session_id": session_id,
         }

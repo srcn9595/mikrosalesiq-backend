@@ -1,11 +1,12 @@
 # ───────────────────────── services/intent_api/main.py ─────────────────────
 from fastapi import FastAPI, Request
-from datetime import datetime
+from datetime import datetime,timezone
 import os, json, pathlib
 from openai import OpenAI
 from langfuse import Langfuse
 from dotenv import load_dotenv
 import logging
+from bson import json_util
 import re
 from typing import List  
 from datetime import datetime, timedelta
@@ -14,6 +15,11 @@ from openai.types.chat import ChatCompletionMessageToolCall
 ROOT_DIR   = pathlib.Path(__file__).parent
 CONFIG_DIR = ROOT_DIR / "config"
 load_dotenv(ROOT_DIR / ".env")
+
+
+_ISO_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$"
+)
 
 # ── statik dosyalar ---------------------------------------------------------
 SYSTEM_PROMPT = (CONFIG_DIR / "system_prompt.txt").read_text(encoding="utf-8")
@@ -33,13 +39,22 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # intent düzeyi haritası
 INTENT_LEVEL_MAP = {
+    # ───── call-level intent’ler ─────
     "cleaned_transcript": "call",
     "file_path": "call",
     "duration": "call",
     "call_date": "call",
     "agent_email": "call",
     "agent_name": "call",
-    "call_insights": "call",
+    "get_call_dates": "call",
+    "get_last_call": "call",
+    "get_transcript_by_call_id": "call",
+    "get_transcripts_by_customer_num": "call",
+    "get_sales_scores": "call",
+    "get_summary_by_call": "call",
+    "semantic_search": "call",
+
+    # ───── customer-level intent’ler ─────
     "contact_email": "customer",
     "contact_name": "customer",
     "customer_num": "customer",
@@ -49,16 +64,51 @@ INTENT_LEVEL_MAP = {
     "close_date": "customer",
     "created_date": "customer",
     "lost_reason": "customer",
-    "get_call_metrics":"customer",
+    "get_call_metrics": "customer",
     "get_conversion_probability": "customer",
     "get_risk_score": "customer",
     "get_next_steps": "customer",
     "get_audio_analysis_commentary": "customer",
-    "get_sentiment_analysis": "customer"
+    "get_sentiment_analysis": "customer",
+    "get_customer_overview": "customer",
+    "get_customer_products": "customer",
+    "get_opportunity_info": "customer",
+    "get_contact_info": "customer",
+    "get_personality_and_sector": "customer",
+    "vector_customer_similarity_search": "customer",
+    "get_customer_patterns": "customer",
+
+    # ───── insight intent’ler ─────
+    "insight_customer_loss_reasons": "customer",
+    "insight_success_patterns": "customer",
+    "insight_customer_tactics": "customer",
+    "insight_risk_profiles": "customer",
+    "insight_customer_recovery": "customer",
+    "insight_agent_communication": "customer"
 }
+
+
+
+def _convert_iso_dates(obj):
+    """
+    Pipeline içindeki ISO-8601 string’leri timezone-aware datetime.datetime’e çevirir.
+    Z dönüşümlerde UTC kullanır; TZ yoksa naive bırakır (gerekirse +03:00 ekleyin).
+    """
+    if isinstance(obj, dict):
+        return {k: _convert_iso_dates(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_convert_iso_dates(v) for v in obj]
+    if isinstance(obj, str) and _ISO_RE.match(obj):
+        # "2025-06-12T00:00:00Z"  →  dt(2025,6,12,0,0,tzinfo=UTC)
+        dt = datetime.fromisoformat(obj.replace("Z", "+00:00"))
+        return dt.astimezone(timezone.utc)  # UTC kaydediyorsanız
+    return obj
 
 def is_call_level_intent(intent: str) -> bool:
     return INTENT_LEVEL_MAP.get(intent) == "call"
+
+def is_vector_based_tool(name: str) -> bool:
+    return name in ("vector_call", "vector_customer")
 
 def fix_pipeline_keys_and_operators(obj):
     """
@@ -336,8 +386,23 @@ async def analyze(req: Request):
                     if t["name"] == "mongo_aggregate":
                         pl = t["arguments"].get("pipeline", [])
                         pl = fix_pipeline_keys_and_operators(pl)
+                        logging.log(logging.DEBUG, "⏮️  Pipeline-raw:\n%s",
+                            json.dumps(pl, default=json_util.default, indent=2))
+                        pl = _convert_iso_dates(pl)
+                        logging.log(logging.DEBUG, "⏮️  Pipeline-chaned:\n%s",
+                            json.dumps(pl, default=json_util.default, indent=2))
                         intent = t.get("intent", "")
                         t["arguments"]["pipeline"] = ensure_call_id(pl, intent)
+
+                    if is_vector_based_tool(t["name"]):
+                        args = t["arguments"]
+                        args.setdefault("top_k", 5)
+                        args.setdefault("threshold", 0.75)
+                        if t["name"] == "vector_customer":
+                            args.setdefault("embedding_type", "customer_level")
+                            args.setdefault("collection", "audio_jobs")
+                        else:
+                            args.setdefault("embedding_type", "call_level")
 
                     plan.append(t)
 

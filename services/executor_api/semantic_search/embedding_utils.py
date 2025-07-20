@@ -48,6 +48,12 @@ def get_call_embedding(text: str) -> Optional[list[float]]:
     except Exception as e:
         log.exception("❌ Embedding alınamadı:")
         return None
+    
+def get_embedding(text: str, embedding_type: str = "call_level") -> Optional[list[float]]:
+    """
+    Genel embedding fonksiyonu: embedding_type = "call_level" | "customer_level"
+    """
+    return get_call_embedding(text)
 
 
 def get_embedding_metadata() -> Dict[str, str | int]:

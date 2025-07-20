@@ -26,8 +26,8 @@
   {
     "type": "function",
     "function": {
-      "name": "vector_search",
-      "description": "Pinecone’da semantik arama – transkript benzeri metinlerde anahtar kelime/konu bulmak için.",
+      "name": "vector_call",
+      "description": "Qdrant'da semantik arama – transkript benzeri metinlerde anahtar kelime/konu bulmak için.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -60,23 +60,6 @@
       }
     }
   },
-
-  {
-    "type": "function",
-    "function": {
-      "name": "enqueue_mini_rag",
-      "description": "Bir müşteri numarası için Mini-RAG özetini kuyrukta arka planda üretir.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "customer_num": { "type": "string" }
-        },
-        "required": ["customer_num"],
-        "additionalProperties": false
-      }
-    }
-  },
-
   {
     "type": "function",
     "function": {
@@ -95,80 +78,80 @@
       }
     }
   },
-
-  {
-    "type": "function",
-    "function": {
-      "name": "write_call_insights",
-      "description": "Tek bir çağrıya ait satış-insight çıktısını MongoDB call_insights koleksiyonuna upsert eder.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "insight": {
-            "type": "object",
-            "properties": {
-              "call_id":       { "type": "string" },
-              "customer_num":  { "type": "string" },
-              "summary":       { "type": "string" },
-
-              "customer_profile": {
-                "type": "object",
-                "properties": {
-                  "personality_type": { "type": "string" },
-                  "role":             { "type": "string" },
-                  "sector":           { "type": "string" },
-                  "needs": {
-                    "type": "array",
-                    "items": { "type": "string" }
-                  }
-                },
-                "required": ["personality_type", "role", "sector"]
-              },
-
-              "sales_scores": {
-                "type": "object",
-                "properties": {
-                  "discovery":     { "type": "number" },
-                  "communication": { "type": "number" },
-                  "objection":     { "type": "number" },
-                  "features":      { "type": "number" },
-                  "closing":       { "type": "number" }
-                },
-                "additionalProperties": false
-              },
-
-              "recommendations": {
-                "type": "array",
-                "items": { "type": "string" }
-              }
-            },
-            "required": ["call_id", "summary"]
-          }
-        },
-        "required": ["insight"],
-        "additionalProperties": false
-      }
-    }
-  },
-  {
+{
   "type": "function",
   "function": {
-    "name": "vector_customer_similarity_search",
-    "description": "Vektör benzerlik ile müşteri analizi – profil, sektör, risk vb. alanlara göre benzer müşteri bulur.",
+    "name": "vector_customer",
+    "description": "Vektör benzerlik ve Mongo pipeline ile müşteri genelleme analizi yapar.",
     "parameters": {
       "type": "object",
       "properties": {
-        "customer_num": {
+        "query": {
           "type": "string",
-          "description": "Analizi yapılacak referans müşteri numarası"
+          "description": "Genel analiz yapılacak doğal dil sorgusu (örn. 'müşteri segmentlerini analiz et')"
         },
         "top_k": {
           "type": "integer",
           "default": 5,
-          "description": "Dönmesi istenen benzer müşteri sayısı"
+          "description": "Benzer müşteri sayısı"
+        },
+        "threshold": {
+          "type": "number",
+          "default": 0.75,
+          "description": "Vektör benzerlik eşik değeri"
+        },
+        "collection": {
+          "type": "string",
+          "description": "MongoDB koleksiyon adı (örn. 'audio_jobs')"
+        },
+        "pipeline": {
+          "type": "array",
+          "description": "MongoDB pipeline yapısı",
+          "items": {
+            "type": "object"
+          }
         }
       },
-      "required": ["customer_num"],
+      "required": ["query"],
+      "additionalProperties": false
+    }
+  }
+},
+{
+  "type": "function",
+  "function": {
+    "name": "insight_engine",
+    "description": "Vektör benzerlik + Mongo pipeline + LLM ile stratejik müşteri analizi yapar.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Analiz yapılacak doğal dil sorgusu (örn. 'müşteri kaybı nedenleri')"
+        },
+        "top_k": {
+          "type": "integer",
+          "description": "Vektör benzerlik için benzer müşteri sayısı"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Benzerlik eşiği (örn. 0.75)"
+        },
+        "collection": {
+          "type": "string",
+          "description": "MongoDB koleksiyonu (örn. 'audio_jobs')"
+        },
+        "pipeline": {
+          "type": "array",
+          "description": "Mongo filter pipeline’ı",
+          "items": { "type": "object" }
+        },
+        "customer_num": {
+          "type": "string",
+          "description": "Tekil analiz için müşteri numarası (örn. '05063466349')"
+        }
+      },
+      "required": ["query"],
       "additionalProperties": false
     }
   }

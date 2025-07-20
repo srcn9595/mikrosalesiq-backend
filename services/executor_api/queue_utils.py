@@ -11,8 +11,6 @@ rds = redis.from_url(REDIS_URL)
 
 _DOWNLOAD_JOBS_KEY              = "download_jobs"
 _DOWNLOAD_ENQUEUED_SET          = "download_enqueued_set"
-_CALL_INSIGHTS_JOBS_KEY         = "call_insights_jobs"
-_CALL_INSIGHTS_ENQUEUED_SET     = "call_insights_enqueued_set"
 _MINI_RAG_JOBS_KEY              = "mini_rag_jobs"
 _MINI_RAG_ENQUEUED_SET          = "mini_rag_enqueued_set"
 _AUDIO_FEATURES_JOBS_KEY        = "audio_features_jobs"
@@ -24,6 +22,8 @@ _SEMANTIC_JOBS_KEY              = "semantic_jobs"
 _SEMANTIC_ENQUEUED_SET          = "semantic_enqueued_set"
 CUSTOMER_EMBEDDING_QUEUE = "customer_embedding_jobs"
 CUSTOMER_EMBEDDING_SET   = "customer_embedding_enqueued_set"
+_INSIGHT_ENGINE_JOBS_KEY = "insight_engine_jobs"
+_INSIGHT_ENGINE_ENQUEUED_SET = "insight_engine_enqueued_set"
 
 
 # ────────────────────── ortak yardımcılar ──────────────────────
@@ -49,8 +49,6 @@ def _customer_from_call_id(mongo, call_id: str) -> str:
 def dequeue_download(call_id: str) -> None:
     rds.srem(_DOWNLOAD_ENQUEUED_SET, call_id)
 
-def dequeue_call_insights(call_id: str) -> None:
-    rds.srem(_CALL_INSIGHTS_ENQUEUED_SET, call_id)
 
 def dequeue_mini_rag(customer_num: str) -> None:
     rds.srem(_MINI_RAG_ENQUEUED_SET, customer_num)
@@ -227,44 +225,6 @@ def enqueue_mini_rag(
         "total_pending":    total_pending,
     }
 
-# ────────────────────── CALL-INSIGHTS KUYRUĞU ──────────────────────
-def is_call_insights_enqueued(call_id: str) -> bool:
-    return rds.sismember(_CALL_INSIGHTS_ENQUEUED_SET, call_id)
-
-
-def mark_call_insights_enqueued(call_id: str) -> None:
-    rds.sadd(_CALL_INSIGHTS_ENQUEUED_SET, call_id)
-    rds.rpush(_CALL_INSIGHTS_JOBS_KEY, call_id)
-
-
-def enqueue_call_insights(call_ids: List[str]) -> Dict[str, int | list | dict]:
-    """
-    • Yoksa liste sonuna ekler, varsa olduğu gibi bırakır.
-    • Hem sayısal özet hem de ayrıntılı ID listeleri döner.
-    """
-    new_items:      list[str] = []
-    already_items:  list[str] = []
-    positions:      dict[str, int | None] = {}
-
-    for cid in call_ids:
-        if is_call_insights_enqueued(cid):
-            already_items.append(cid)
-        else:
-            mark_call_insights_enqueued(cid)
-            new_items.append(cid)
-
-        positions[cid] = _queue_position(_CALL_INSIGHTS_JOBS_KEY, cid)
-
-    all_queued = [x.decode() for x in rds.lrange(_CALL_INSIGHTS_JOBS_KEY, 0, -1)]
-    return {
-        "newly_enqueued":     len(new_items),
-        "already_enqueued":   len(already_items),
-        "new_items":          new_items,
-        "already_items":      already_items,
-        "positions":          positions,
-        "all_queued":         all_queued,
-    }
-
 # ———————————————————————————————— AUDIO FEATURES KUYRUĞU ————————————————————————————
 
 def is_audio_features_enqueued(call_id: str) -> bool:
@@ -328,3 +288,73 @@ def mark_customer_embedding_enqueued(customer_num: str):
 
 def dequeue_customer_embedding(customer_num: str):
     rds.srem(CUSTOMER_EMBEDDING_SET, customer_num)
+
+# ———————————————————————————————— INSIGHT ENGINE KUYRUĞU ————————————————————————————
+
+def is_insight_enqueued(customer_num: str) -> bool:
+    return rds.sismember(_INSIGHT_ENGINE_ENQUEUED_SET, customer_num)
+
+def enqueue_insight_engine(
+    customer_num: str,
+    query: str,
+    pipeline: list,
+    notification_id: Optional[str] = None,
+    mongo=None,
+) -> Dict[str, Any]:
+    log.info(f"enqueue_insight_engine: {customer_num=} {notification_id=} {query=}")
+
+    # 1) Zaten varsa pozisyon döndür
+    if is_insight_enqueued(customer_num):
+        all_items = [json.loads(x.decode()) for x in rds.lrange(_INSIGHT_ENGINE_JOBS_KEY, 0, -1)]
+        position = next((i + 1 for i, ctx in enumerate(all_items) if ctx["customer_num"] == customer_num), None)
+        total_pending = len(all_items)
+        return {
+            "already_enqueued": True,
+            "position":         position or "?",
+            "total_pending":    total_pending or "?",
+        }
+
+    # 2) Redis’e job context’i olarak pushla
+    context = {
+        "customer_num": customer_num,
+        "query": query,
+        "pipeline": pipeline,
+        "notification_id": notification_id
+    }
+    rds.sadd(_INSIGHT_ENGINE_ENQUEUED_SET, customer_num)
+    rds.rpush(_INSIGHT_ENGINE_JOBS_KEY, json.dumps(context))
+    total_pending = rds.llen(_INSIGHT_ENGINE_JOBS_KEY)
+
+    # 3) Mongo notification kaydına ekle
+    if notification_id and mongo:
+        from bson import ObjectId
+        notif = mongo.notifications.find_one({"_id": ObjectId(notification_id)})
+        if notif:
+            jobs = notif.get("jobs", [])
+            for job in jobs:
+                if job.get("type") == "insight_engine" and job.get("customer_num") == customer_num:
+                    mongo.notifications.update_one(
+                        {
+                            "_id": ObjectId(notification_id),
+                            "jobs.customer_num": customer_num,
+                            "jobs.type": "insight_engine",
+                        },
+                        {
+                            "$set": {"jobs.$.updated_at": datetime.utcnow()},
+                        }
+                    )
+                    break
+            else:
+                create_notification_job(
+                    mongo=mongo,
+                    job_type="insight_engine",
+                    notification_id=notification_id,
+                    customer_num=customer_num,
+                    status="pending"
+                )
+
+    return {
+        "already_enqueued": False,
+        "position":         total_pending,
+        "total_pending":    total_pending,
+    }

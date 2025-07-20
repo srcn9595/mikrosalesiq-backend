@@ -1,0 +1,11 @@
+[
+  { "intent": "get_lost_reason_analysis",        "description": "Kapanmayan fırsat sebepleri + geri kazanım" },
+  { "intent": "get_low_conversion_segments",     "description": "Düşük dönüşümlü segmentler" },
+  { "intent": "get_successful_audio_patterns",   "description": "Ses tonu & satış başarısı ilişkisi" },
+  { "intent": "get_customer_specific_tactics",   "description": "Tek müşteri özelinde ikna taktikleri" },
+  { "intent": "get_successful_sales_strategies", "description": "Kazanan fırsatlarda tekrar eden stratejiler" },
+  { "intent": "get_high_risk_profiles",          "description": "Yüksek riskli müşteri profilleri" },
+  { "intent": "get_win_back_tactics",            "description": "Geri kazanım taktikleri" },
+  { "intent": "get_communication_style_impact",  "description": "İletişim tarzı etkisi" },
+  { "intent": "get_individual_failure_analysis", "description": "Tek kayıp analizi" }
+]

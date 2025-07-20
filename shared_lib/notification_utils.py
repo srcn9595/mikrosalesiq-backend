@@ -22,7 +22,7 @@ def create_notification(
     notif = {
         "user_id": user_id,
         "session_id": session_id,
-        "type": notif_type,  # "mini_rag", "call_insight", vs.
+        "type": notif_type,  # "mini_rag" vs.
         "related_customer": related_customers[0] if related_customers and len(related_customers) == 1 else None,
         "related_customers": related_customers or [],
         "status": "pending",       # "pending", "processing", "done", "failed"
